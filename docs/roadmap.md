@@ -5,13 +5,13 @@ The user's Phase 0 approval authorizes Phase 1 application/backend work on 27 Oc
 | Phase | Incremental deliverable | Engineering hours |
 | --- | --- | --- |
 | 0 (complete) | Ubuntu environment, schema, communication contract | 8–16 |
-| 1 (current) | Working student application/backend foundation and complete local demo journey | 24–40 |
-| 2 | Live authentication/payment configuration and backend hardening | 16–24 |
-| 3 | Complete mobile screen coverage, accessibility, device QA, final visual polish | 56–80 |
+| 1 (complete) | Working student application/backend foundation and complete local demo journey | 24–40 |
+| 2 (complete, 2 items deferred — see `docs/phase2-review.md`) | Live authentication/payment configuration and backend hardening | 16–24 |
+| 3 (current) | Complete mobile screen coverage, accessibility, device QA, final visual polish, real Supabase sign-in | 56–80 |
 | 4 | Connect and validate the hardware team's adapter against agreed event/command contracts | 16–24 |
 | 5 | End-to-end failure recovery, deployment, and release checks | 24–40 |
 | Total | All phases | 144–224 |
-| Remaining after Phase 0 | Phases 1–5 | 136–208 |
+| Remaining after Phase 2 | Phases 3–5 | 96–144 |
 
 Allow approximately 175–280 hours overall with integration contingency. These are planning estimates for engineering effort, not a promise of elapsed agent runtime. Parallel work can shorten implementation; account activation, approvals, and hardware-team availability can add waiting time. Do not double-count implementation already completed in an earlier phase when revising the remaining budget.
 
