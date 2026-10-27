@@ -1,7 +1,7 @@
 import React from 'react';
 import {View} from 'react-native';
 import Svg, {Circle, G, Line, Path, Rect, Text as SvgText} from 'react-native-svg';
-import type {OrderStatus} from '../api';
+import {AUTH_MODE, type OrderStatus} from '../api';
 import {COLORS as C} from '../model';
 import {Icon, Label, T} from '../ui';
 
@@ -11,7 +11,7 @@ export function CampusMap({status, hostel = 'C'}: {status?: OrderStatus; hostel?
   const arrived = status && ['Arrived','Paid','Completed'].includes(status);
   const position = arrived ? {x: 465,y: 95} : moving ? {x: 354,y: 224} : {x: 198,y: 281};
   return <View style={{backgroundColor: '#EDF1E7', borderRadius: 13, overflow: 'hidden', position: 'relative', minHeight: 260}}>
-    <View style={{position:'absolute',top:15,left:17,zIndex:1}}><Label style={{color:'#7E8D7B',fontSize:8}}>Illustrative campus · Demo</Label></View>
+    <View style={{position:'absolute',top:15,left:17,zIndex:1}}><Label style={{color:'#7E8D7B',fontSize:8}}>{AUTH_MODE==='demo'?'Illustrative campus · Demo':'Illustrative campus'}</Label></View>
     <Svg width="100%" height={280} viewBox="0 0 700 350" accessibilityLabel="Illustrative campus route, not a real navigation map">
       <Rect width={700} height={350} fill="#EDF1E7" />
       <Path d="M-20 239 L175 239 L175 5 M15 132 L700 132 M422 -10 L422 370 M674 -10 L674 350 M0 326 L700 326" fill="none" stroke="#FBFCF7" strokeWidth={18} />

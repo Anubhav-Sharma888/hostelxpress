@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -10,6 +11,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from .config import Settings, is_loopback
+
+log = logging.getLogger('hostelxpress.auth')
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -50,10 +53,18 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials | N
         else:
             jwks: PyJWKClient = request.app.state.jwks
             key = jwks.get_signing_key_from_jwt(token)
+            # Token timestamps come from an external identity provider while
+            # this host may be a VM with intermittent clock drift; a small
+            # leeway keeps fresh iat claims valid. Leeway applies to exp as
+            # well, which is standard practice for external issuers.
             claims = jwt.decode(token, key.key, algorithms=['RS256','ES256'], issuer=settings.issuer,
-                                audience='authenticated', options={'require':['sub','iss','aud','exp']})
+                                audience='authenticated', leeway=30,
+                                options={'require':['sub','iss','aud','exp']})
             if claims.get('role') != 'authenticated':
                 raise jwt.InvalidTokenError('Wrong role')
         return Principal(UUID(claims['sub']), settings.is_demo)
-    except (jwt.PyJWTError, ValueError, TypeError, KeyError):
+    except (jwt.PyJWTError, ValueError, TypeError, KeyError) as error:
+        # The reason matters operationally (expired vs wrong issuer vs key
+        # fetch failure); never log the token or claims themselves.
+        log.warning('Access token rejected: %s: %.160s', type(error).__name__, error)
         raise HTTPException(401, 'Invalid or expired access token', headers={'WWW-Authenticate':'Bearer'}) from None

@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Pressable, useWindowDimensions, View} from 'react-native';
 import {router} from 'expo-router';
+import {AUTH_MODE} from '../api';
 import {BookModal} from '../components/BookModal';
 import {CampusMap} from '../components/CampusMap';
 import {OrderCard} from '../components/OrderCard';
@@ -20,7 +21,7 @@ export default function Overview() {
     {loading&&!updatedAt?<Loading/>:<>
       <View style={{flexDirection:wide?'row':'column',gap:21}}>
         <Card style={{flex:wide?2.08:undefined,padding:22,gap:19,minWidth:0}}>
-          <View style={common.between}><View style={{flexDirection:'row',gap:7,alignItems:'center'}}><View style={{height:6,width:6,borderRadius:3,backgroundColor:active?C.orange:'#98AC8B'}}/><Label>{active?'Your active delivery':'Ready when you are'}</Label></View><Pill tone="neutral" icon="radio-outline">{active&&active.bot&&!isStale(active.bot.last_seen_at,now)?'Demo updates':'Demo workspace'}</Pill></View>
+          <View style={common.between}><View style={{flexDirection:'row',gap:7,alignItems:'center'}}><View style={{height:6,width:6,borderRadius:3,backgroundColor:active?C.orange:'#98AC8B'}}/><Label>{active?'Your active delivery':'Ready when you are'}</Label></View><Pill tone="neutral" icon="radio-outline">{active&&active.bot&&!isStale(active.bot.last_seen_at,now)?(AUTH_MODE==='demo'?'Demo updates':'Live updates'):(AUTH_MODE==='demo'?'Demo workspace':'Your workspace')}</Pill></View>
           <View style={{maxWidth:470}}><Heading style={{fontSize:26,lineHeight:34,letterSpacing:-1}}>{active?STATUS_COPY[active.status].title:'The last stretch, sorted.'}</Heading><T style={{marginTop:7,color:C.muted,fontSize:12,lineHeight:20}}>{active?STATUS_COPY[active.status].description:'From Gate 2 to your hostel. Reserve a secure compartment and let your parcel come to you.'}</T></View>
           <CampusMap status={active?.status} hostel={active?.destination_hostel_block||user?.hostel_block||'C'}/>
           <View style={[common.between,{flexWrap:'wrap',gap:9}]}>

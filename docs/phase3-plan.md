@@ -10,7 +10,9 @@ The backend already verifies Supabase ES256/RS256 JWTs against the live project'
 - Session: access token held in memory per the existing design, refreshed by supabase-js; sign-out and expiry return the user to sign-in.
 - First sign-in lands on profile completion (name + hostel block) via the existing `PATCH /v1/me`; the API base URL points at the production backend when `APP_ENV` is not demo.
 - Demo mode remains the local-development path (`scripts/run_demo.sh`); real mode is selected by configuration, never silently.
-- The deferred Phase 2 item (real-token end-to-end test) completes as part of this work: sign up → sign in → book → track on the live backend.
+- The deferred Phase 2 item (real-token end-to-end test) completed as part of this work: sign up → sign in → book → track on the live backend.
+
+**Increment 1 record (28 October 2026, reviewer-approved):** real sign-in/up shipped — `@supabase/supabase-js` with in-memory sessions only, real sign-in screen variant, demo-label gating in every screen, backend `PATCH /v1/me` upsert for real JWT users (with the partial-PATCH clobber fix from QA), ES256 token leeway for VM clock drift, and a rejection log that never records tokens or claims. Verified live: sign-up → profile → sign-out → sign-in on the production backend against the real project. Reviewer-tracked follow-up for the screen-coverage increment: if email confirmation is ever re-enabled, a user confirming later lands without a completed profile and profile.tsx is read-only — add first-sign-in profile completion (when `hostel_block` is null) or a profile-edit affordance.
 
 ## Screen-state coverage matrix
 

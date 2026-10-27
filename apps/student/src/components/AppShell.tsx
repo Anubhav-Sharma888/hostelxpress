@@ -2,6 +2,7 @@ import React, {useEffect} from 'react';
 import {Pressable, ScrollView, useWindowDimensions, View} from 'react-native';
 import {router, Slot, usePathname} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {AUTH_MODE} from '../api';
 import {COLORS as C} from '../model';
 import {useApp} from '../state';
 import {Icon, IconName, Label, T} from '../ui';
@@ -49,7 +50,7 @@ export function AppShell() {
       <View style={{height:desktop?78:70+insets.top,paddingTop:desktop?0:insets.top,paddingHorizontal:desktop?39:20,borderBottomWidth:1,borderBottomColor:C.line,flexDirection:'row',alignItems:'center',justifyContent:'space-between',backgroundColor:C.canvas}}>
         {desktop ? <T style={{fontSize:12,color:C.muted}}>Your everyday, a little easier.</T> : <Wordmark small/>}
         <View style={{flexDirection:'row',alignItems:'center',gap:desktop?19:11}}>
-          <View style={{flexDirection:'row',gap:6,alignItems:'center',backgroundColor:'#ECEFE5',paddingHorizontal:9,paddingVertical:5,borderRadius:20}}><View style={{width:5,height:5,borderRadius:3,backgroundColor:'#D38B52'}}/><T style={{fontSize:9,lineHeight:15,color:'#69735F'}}>Demo environment</T></View>
+          {AUTH_MODE==='demo'&&<View style={{flexDirection:'row',gap:6,alignItems:'center',backgroundColor:'#ECEFE5',paddingHorizontal:9,paddingVertical:5,borderRadius:20}}><View style={{width:5,height:5,borderRadius:3,backgroundColor:'#D38B52'}}/><T style={{fontSize:9,lineHeight:15,color:'#69735F'}}>Demo environment</T></View>}
           {desktop && <View style={{width:1,height:24,backgroundColor:C.line}}/>}
           <Pressable accessibilityRole="button" accessibilityLabel="Open my profile" onPress={()=>router.push('/profile')} style={{flexDirection:'row',alignItems:'center',gap:10}}>
             <View style={{height:32,width:32,borderRadius:16,backgroundColor:'#E2E9D9',alignItems:'center',justifyContent:'center'}}><T style={{fontFamily:'DMSansBold',fontSize:11,color:C.forest}}>{user?.name.slice(0,1).toUpperCase()}</T></View>
@@ -60,7 +61,7 @@ export function AppShell() {
       <ScrollView style={{flex:1}} contentContainerStyle={{padding:desktop?36:20,paddingBottom:desktop?28:28+insets.bottom,alignItems:'center'}} keyboardShouldPersistTaps="handled">
         <View style={{width:'100%',maxWidth:1320}}><Slot/></View>
         <View style={{width:'100%',maxWidth:1320,marginTop:34,paddingTop:18,borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',justifyContent:'space-between',gap:15}}>
-          <T style={{fontSize:9,color:'#939B8D'}}>Made for life on campus.</T><T style={{fontSize:9,color:'#939B8D'}}>Demo · No real payments or robot movement</T>
+          <T style={{fontSize:9,color:'#939B8D'}}>Made for life on campus.</T>{AUTH_MODE==='demo'&&<T style={{fontSize:9,color:'#939B8D'}}>Demo · No real payments or robot movement</T>}
         </View>
       </ScrollView>
       {!desktop && <View style={{flexDirection:'row',paddingTop:9,paddingBottom:9+insets.bottom,backgroundColor:C.white,borderTopWidth:1,borderTopColor:C.line}}>

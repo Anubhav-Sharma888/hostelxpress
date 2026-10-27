@@ -150,7 +150,15 @@ def create_app(settings:Settings | None=None) -> FastAPI:
         with request.app.state.db.connection() as conn:
             if values:
                 # Column names are hardcoded; user-controlled values are parameters.
-                conn.execute('UPDATE public.users SET name=coalesce(%s,name),hostel_block=coalesce(%s,hostel_block) WHERE id=%s',(values.get('name'),values.get('hostel_block'),user.id))
+                if user.is_demo:
+                    conn.execute('UPDATE public.users SET name=coalesce(%s,name),hostel_block=coalesce(%s,hostel_block) WHERE id=%s',(values.get('name'),values.get('hostel_block'),user.id))
+                else:
+                    # First profile completion after a real Supabase signup creates
+                    # the student row; the JWT subject is the only identity source.
+                    # 'Student' mirrors the DDL default; the conflict branch binds
+                    # the raw values again so a partial PATCH never clobbers fields
+                    # it did not send. users_touch_updated_at maintains updated_at.
+                    conn.execute('INSERT INTO public.users(id,name,hostel_block) VALUES(%s,coalesce(%s,\'Student\'),%s) ON CONFLICT (id) DO UPDATE SET name=coalesce(%s,public.users.name),hostel_block=coalesce(%s,public.users.hostel_block)',(user.id,values.get('name'),values.get('hostel_block'),values.get('name'),values.get('hostel_block')))
             return service.get_profile(conn,user.id)
 
     @app.get('/v1/orders')

@@ -1,10 +1,11 @@
 import React, {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react';
 import {AppState} from 'react-native';
-import {ApiError, DemoAction, Order, request, Session, User} from './api';
+import {ApiError, AUTH_MODE, DemoAction, Order, request, Session, supabase, User} from './api';
 
 type AppStateValue = {
   session: Session | null; user: User | null; orders: Order[]; loading: boolean; error: string | null; updatedAt: number | null;
-  signIn: (name: string, hostel: string) => Promise<void>; signOut: () => void;
+  signIn: (email: string, password: string) => Promise<void>; signUp: (email: string, password: string, name: string, hostel: string) => Promise<void>;
+  signOut: () => void;
   refresh: () => Promise<void>; createOrder: (label: string, hostel: string, key: string) => Promise<Order>;
   advance: (id: string, action: DemoAction) => Promise<Order>;
 };
@@ -20,7 +21,16 @@ export function AppProvider({children}: {children: React.ReactNode}) {
   const generation = useRef(0);
   const refreshing = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    if (AUTH_MODE !== 'real') return;
+    const {data} = supabase().auth.onAuthStateChange((event, authSession) => {
+      if ((event !== 'TOKEN_REFRESHED' && event !== 'SIGNED_IN') || !authSession) return;
+      setSession(current => current && current.mode === 'real' && current.access_token !== authSession.access_token ? {...current, access_token: authSession.access_token} : current);
+    });
+    return () => { data.subscription.unsubscribe(); };
+  }, []);
   const signOut = useCallback(() => {
+    if (AUTH_MODE === 'real') void supabase().auth.signOut().catch(() => undefined);
     generation.current += 1; refreshing.current = false;
     setSession(null); setUser(null); setOrders([]); setError(null); setUpdatedAt(null); setLoading(false);
   }, []);
@@ -49,11 +59,37 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     const interval = setInterval(() => {if (AppState.currentState === 'active') void refresh();}, 5000);
     return () => { clearTimeout(initial); clearInterval(interval); };
   }, [session, refresh]);
-  const signIn = async (name: string, hostel: string) => {
+  const signIn = async (email: string, password: string) => {
     const current = ++generation.current;
-    const response = await request<Session>('/auth/demo', undefined, {method: 'POST', body: {name: name.trim(), hostel_block: hostel}});
+    if (AUTH_MODE === 'real') {
+      const {data, error} = await supabase().auth.signInWithPassword({email, password});
+      if (error || !data.session) throw new Error(error?.message || 'We could not sign you in. Please check your email and password.');
+      if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
+      setLoading(true);
+      const profile = await request<User>('/v1/me', data.session.access_token);
+      if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
+      setSession({access_token: data.session.access_token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: profile});
+      setUser(profile); setOrders([]); setError(null);
+      return;
+    }
+    const response = await request<Session>('/auth/demo', undefined, {method: 'POST', body: {name: email.trim(), hostel_block: password}});
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
     setLoading(true); setSession(response); setUser(response.user); setOrders([]); setError(null);
+  };
+  const signUp = async (email: string, password: string, name: string, hostel: string) => {
+    if (AUTH_MODE !== 'real') throw new Error('Account creation is not available in this environment.');
+    const current = ++generation.current;
+    const {data, error} = await supabase().auth.signUp({email, password});
+    if (error) throw new Error(error.message);
+    if (!data.session) throw new Error('Email confirmation is required. Confirm your email, then sign in.');
+    if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
+    setLoading(true);
+    const token = data.session.access_token;
+    await request<User>('/v1/me', token, {method: 'PATCH', body: {name: name.trim(), hostel_block: hostel}});
+    const profile = await request<User>('/v1/me', token);
+    if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
+    setSession({access_token: token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: profile});
+    setUser(profile); setOrders([]); setError(null);
   };
   const upsert = (order: Order) => setOrders(current => [order, ...current.filter(item => item.id !== order.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
   const createOrder = async (label: string, hostel: string, key: string) => {
@@ -72,6 +108,6 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your deliveries.');
     upsert(order); void refresh(); return order;
   };
-  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signOut,refresh,createOrder,advance}}>{children}</Context.Provider>;
+  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signUp,signOut,refresh,createOrder,advance}}>{children}</Context.Provider>;
 }
 export function useApp() {const value = useContext(Context); if (!value) throw new Error('AppProvider is required.'); return value;}

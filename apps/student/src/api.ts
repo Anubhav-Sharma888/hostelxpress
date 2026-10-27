@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import {createClient, SupabaseClient} from '@supabase/supabase-js';
 
 export type OrderStatus = 'Pending' | 'Loaded' | 'Transit' | 'Arrived' | 'Paid' | 'Completed' | 'Failed';
 export type User = { id: string; name: string; hostel_block: string };
@@ -14,6 +15,14 @@ export type Session = { access_token: string; token_type: string; expires_in: nu
 export type Payment = { order_id: string; amount: number; currency: string; provider: 'demo' | 'razorpay'; status: 'pending' | 'paid'; qr_image_url: string | null; qr_payload: string | null; expires_at: string | null };
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+export const AUTH_MODE: 'real' | 'demo' = SUPABASE_URL && SUPABASE_KEY ? 'real' : 'demo';
+let supabaseClient: SupabaseClient | null = null;
+export function supabase(): SupabaseClient {
+  if (!supabaseClient) supabaseClient = createClient(SUPABASE_URL as string, SUPABASE_KEY as string, {auth: {persistSession: false, autoRefreshToken: true}});
+  return supabaseClient;
+}
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = 'ApiError'; }
 }
