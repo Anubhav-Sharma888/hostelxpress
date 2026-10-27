@@ -17,7 +17,7 @@ The user's responsibility is the entire student application, backend, authentica
 
 Gazebo, SLAM, route planning, navigation, firmware, motor control, and physical hardware implementation are outside this repository's scope.
 
-Respect the user's explicit phase approval gate. Phase 0 and Phase 1 are complete, locally validated, and published to https://github.com/Anubhav-Sharma888/hostelxpress (initial commit `7426035`; both GitHub Actions workflows pass). Phase 2 (live authentication/payment configuration and backend hardening, per `docs/roadmap.md`) is **not** yet authorized: it starts only after the user explicitly approves the Phase 1 review in the conversation. When the user approves, first update this paragraph to record the new authorization, then implement. Always prepare a concrete, reviewable result and stop for the required phase approval before implementing the next phase.
+Respect the user's explicit phase approval gate. Phase 0 and Phase 1 are complete, locally validated, and published to https://github.com/Anubhav-Sharma888/hostelxpress. The user explicitly approved the Phase 1 review and authorized Phase 2 (live authentication/payment configuration and backend hardening, per `docs/roadmap.md`) on 28 October 2026. Phase 3 begins only after the user reviews the Phase 2 result. A standing background QA agent audits delivered work against documented claims; material findings must be surfaced to the user. Always prepare a concrete, reviewable result and stop for the required phase approval before implementing the next phase.
 
 # Verification
 
