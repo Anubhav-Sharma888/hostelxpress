@@ -52,15 +52,11 @@ Authorized by the user on 28 October 2026. Goal: the backend is genuinely config
 
 **Observed 28 October 2026:** the user's test keys authenticate successfully (payments, orders, and customers APIs return 200), but `GET/POST /payments/qr_codes` returns Razorpay's route-not-found error for this account while the documented endpoint is unchanged. The practical cause is Razorpay gating UPI/QR features on account activation. **User action:** complete account activation (KYC: PAN, bank, business details) in the dashboard; rerun the check afterwards. The backend's payment-creation and webhook paths remain validated by provider doubles locally and need no change.
 
-### 3. HiveMQ Cloud broker (~15 minutes)
+### 3. MQTT broker — decision recorded 28 October 2026
 
-1. Create a free Serverless (or Starter) cluster at hivemq.com; note the hostname and TLS port 8883.
-2. Create two sets of credentials in Access Management (least privilege):
-   - Publisher (backend command publisher): **Publish** allowed on `hostelxpress/v1/bots/+/commands` only.
-   - Ingest (backend listener): **Subscribe** allowed on `hostelxpress/v1/bots/+/telemetry`, `/state`, `/events`, `/acks`, `/availability`.
-3. Per-bot device credentials are generated later by `python -m app.cli provision-bot` (the CLI prints each secret once).
-4. Put in `.env`: `MQTT_HOST`, `MQTT_PORT=8883`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_INGEST_USERNAME`, `MQTT_INGEST_PASSWORD`, `MQTT_INGEST_CLIENT_ID=hostelxpress-backend-ingest`. HiveMQ Cloud uses standard public CAs, so `MQTT_CA_FILE` can stay unset.
-5. The existing transport proof (`HOSTELXPRESS_MQTT_PROOF=1 bash scripts/check_mqtt_link.sh`) stays a local Mosquitto check; a HiveMQ-flavored live proof is written once the cluster exists.
+No cloud broker is used in this phase, and none is planned before the campus pilot. HiveMQ's free Serverless plan is closed to new signups (retiring 2026-12-31), and the user requires zero-cost infrastructure only. The MQTT transport path is already validated end-to-end by the local Mosquitto TLS proof (`tests/integration/mqtt_tls_proof.py`), which exercises the same bridge, wire contract, ACLs, and signed-HTTP acknowledgements a cloud broker would.
+
+For the campus pilot, the backend and a Mosquitto broker run on the same machine or campus network and the bot connects over the campus LAN; the backend stays broker-agnostic, so a hosted broker (EMQX Serverless free with Spend Limit 0, if its signup still works) remains a drop-in env-var change (`MQTT_HOST`, `MQTT_PORT`, credentials, `MQTT_CA_FILE`) with no code changes. The `MQTT_*` variables simply stay unset until then; `/health` reports `mqtt: disabled` and the system behaves correctly without it.
 
 ## Verification this phase
 
