@@ -39,6 +39,8 @@ Authorized by the user on 28 October 2026. Goal: the backend is genuinely config
 4. Create one test user in Authentication → Users (any email/password) and sign in once via the Supabase dashboard or the app later; put the resulting access token in `HOSTELXPRESS_SUPABASE_TEST_TOKEN` for the strongest check (optional).
 5. Then run: `HOSTELXPRESS_CHECK_SUPABASE=1 python scripts/check_supabase.py`
 
+**Observed 28 October 2026:** schema applied to the user's live project over the session pooler (password percent-encoded after their chosen password broke the raw URI). Full check passed: JWKS serves one asymmetric ES256 signing key, auth health 200, publishable key accepted, PostgreSQL 17.11, both migrations recorded, all four tables present with row level security enabled.
+
 ### 2. Razorpay test account (~10 minutes)
 
 1. Sign up at dashboard.razorpay.com; test mode is available immediately (activation/KYC can wait).
@@ -47,6 +49,8 @@ Authorized by the user on 28 October 2026. Goal: the backend is genuinely config
    - `RAZORPAY_KEY_SECRET=...`
 3. `RAZORPAY_WEBHOOK_SECRET` comes later: the backend verifies it already, but the dashboard needs a **public HTTPS webhook URL** (a deployed backend, not a laptop). Choose the secret then and put it in `.env`.
 4. Then run: `HOSTELXPRESS_CHECK_RAZORPAY=1 python scripts/check_razorpay.py`
+
+**Observed 28 October 2026:** the user's test keys authenticate successfully (payments, orders, and customers APIs return 200), but `GET/POST /payments/qr_codes` returns Razorpay's route-not-found error for this account while the documented endpoint is unchanged. The practical cause is Razorpay gating UPI/QR features on account activation. **User action:** complete account activation (KYC: PAN, bank, business details) in the dashboard; rerun the check afterwards. The backend's payment-creation and webhook paths remain validated by provider doubles locally and need no change.
 
 ### 3. HiveMQ Cloud broker (~15 minutes)
 

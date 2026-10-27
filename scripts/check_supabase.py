@@ -40,6 +40,8 @@ def check_http(base_url: str, results: dict) -> None:
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.query:
         raise RuntimeError("SUPABASE_URL must be a plain HTTPS origin")
     with httpx.Client(timeout=10, follow_redirects=False) as client:
+        publishable = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
+        auth_headers = {"apikey": publishable, "Authorization": "Bearer " + publishable} if publishable else {}
         jwks_response = client.get(base_url + "/auth/v1/.well-known/jwks.json")
         if jwks_response.status_code != 200:
             raise RuntimeError(f"JWKS endpoint returned HTTP {jwks_response.status_code}")
@@ -52,15 +54,13 @@ def check_http(base_url: str, results: dict) -> None:
         results["jwks_algorithms"] = algorithms
         if not set(algorithms) & {"RS256", "ES256"}:
             raise RuntimeError(f"JWKS offers no asymmetric signing key: {algorithms}")
-        health = client.get(base_url + "/auth/v1/health")
+        health = client.get(base_url + "/auth/v1/health", headers=auth_headers)
         results["auth_health"] = health.status_code
         if health.status_code != 200:
             raise RuntimeError("Auth service is not healthy")
 
-        publishable = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
         if publishable:
-            settings_response = client.get(base_url + "/auth/v1/settings",
-                                           headers={"apikey": publishable, "Authorization": "Bearer " + publishable})
+            settings_response = client.get(base_url + "/auth/v1/settings", headers=auth_headers)
             results["publishable_key_accepted"] = settings_response.status_code == 200
             if settings_response.status_code == 401:
                 raise RuntimeError("Supabase rejected the publishable key")
@@ -84,14 +84,15 @@ def check_token(base_url: str, token: str, results: dict) -> None:
 def check_schema(results: dict) -> None:
     import psycopg
     from psycopg.conninfo import make_conninfo
+    from psycopg.rows import dict_row
 
     db_url = os.environ.get("SUPABASE_DB_URL", "")
     if not db_url:
         return
     if "sslmode=" not in db_url:
         db_url = make_conninfo(db_url, sslmode="require")
-    with psycopg.connect(db_url, autocommit=True) as conn:
-        version = conn.execute("show server_version_num").fetchone()[0]
+    with psycopg.connect(db_url, autocommit=True, row_factory=dict_row) as conn:
+        version = conn.execute("show server_version_num").fetchone()["server_version_num"]
         results["postgres_server_version"] = version
         for table in ("users", "bots", "orders", "transactions"):
             row = conn.execute("SELECT to_regclass(%s) IS NOT NULL AS exists_, relrowsecurity FROM pg_class WHERE oid=to_regclass(%s)",
@@ -100,7 +101,7 @@ def check_schema(results: dict) -> None:
                 raise RuntimeError(f"public.{table} is missing; run supabase/init.sql first")
             if not row["relrowsecurity"]:
                 raise RuntimeError(f"Row level security is not enabled on public.{table}")
-        applied = [r[0] for r in conn.execute("SELECT version FROM hostelxpress_private.schema_migrations ORDER BY version").fetchall()]
+        applied = [r["version"] for r in conn.execute("SELECT version FROM hostelxpress_private.schema_migrations ORDER BY version").fetchall()]
         results["migrations_applied"] = applied
         required = {"0001_application_core", "0002_device_reconciliation"}
         if not required.issubset(set(applied)):
