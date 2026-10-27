@@ -39,7 +39,7 @@ Authorized by the user on 28 October 2026. Goal: the backend is genuinely config
 4. Create one test user in Authentication → Users (any email/password) and sign in once via the Supabase dashboard or the app later; put the resulting access token in `HOSTELXPRESS_SUPABASE_TEST_TOKEN` for the strongest check (optional).
 5. Then run: `HOSTELXPRESS_CHECK_SUPABASE=1 python scripts/check_supabase.py`
 
-**Observed 28 October 2026:** schema applied to the user's live project over the session pooler (password percent-encoded after their chosen password broke the raw URI). Full check passed: JWKS serves one asymmetric ES256 signing key, auth health 200, publishable key accepted, PostgreSQL 17.11, both migrations recorded, all four tables present with row level security enabled.
+**Observed 28 October 2026:** schema applied to the user's live project over the session pooler (password percent-encoded after their chosen password broke the raw URI). Full check passed: JWKS serves one asymmetric ES256 signing key, auth health 200, publishable key accepted, PostgreSQL 17.11, both migrations recorded, all four tables present with row level security enabled. The backend also booted in production mode against this live database: `/health` reported mode production, database ready, payments configured, MQTT disabled, and `/auth/demo` correctly returned 404.
 
 ### 2. Razorpay test account (~10 minutes)
 
