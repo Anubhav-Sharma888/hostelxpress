@@ -13,13 +13,51 @@ from jwt import PyJWKClient
 from psycopg import Error as DatabaseError
 from psycopg.types.json import Jsonb
 
-from . import payments,service
+from . import payments,service,throttle
 from .auth import Principal,current_user,demo_token,require_local_demo
 from .config import Settings,get_settings
 from .db import Database
 from .models import Booking,DemoAdvance,DemoLogin,ProfilePatch
 
 log=logging.getLogger('hostelxpress')
+
+# API responses are never cacheable and never embeddable; HTML documentation
+# still needs its own scripts, so the strict CSP targets API paths only.
+API_HEADERS={'Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'"}
+
+
+class SecurityHeadersMiddleware:
+    def __init__(self,app):
+        self.app=app
+    async def __call__(self,scope,receive,send):
+        if scope['type']!='http':
+            await self.app(scope,receive,send)
+            return
+        path=scope.get('path','')
+        async def send_with_headers(message):
+            if message['type']=='http.response.start':
+                headers=message.setdefault('headers',[])
+                headers.extend([(b'x-content-type-options',b'nosniff'),(b'referrer-policy',b'no-referrer')])
+                if any(path.startswith(prefix) for prefix in ('/v1/','/auth/','/webhooks/')):
+                    headers.extend([(k.encode(),v.encode()) for k,v in API_HEADERS.items()])
+            await send(message)
+        await self.app(scope,receive,send_with_headers)
+
+
+def warn_unconfigured(settings:Settings):
+    if settings.is_demo:
+        return
+    missing=[]
+    if not (settings.razorpay_key_id and settings.razorpay_key_secret):
+        missing.append('RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET: payment creation will be refused')
+    if not settings.razorpay_webhook_secret:
+        missing.append('RAZORPAY_WEBHOOK_SECRET: provider webhooks will be refused')
+    if not settings.mqtt_host:
+        missing.append('MQTT_HOST: live device telemetry and command publication stay off')
+    if missing:
+        for entry in missing:
+            log.warning('Integration not configured: %s',entry)
+        log.warning('The API fails closed; configure these before enabling live traffic')
 
 
 def create_app(settings:Settings | None=None) -> FastAPI:
@@ -44,6 +82,9 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             bridge=MQTTBridge(settings,app.state.db)
             bridge.start()
         app.state.mqtt_bridge=bridge
+        app.state.device_throttle=throttle.FailureThrottle(limit=30)
+        app.state.webhook_throttle=throttle.FailureThrottle(limit=30)
+        warn_unconfigured(settings)
         async def worker():
             while True:
                 try:
@@ -67,6 +108,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
 
     app=FastAPI(title='Hostelxpress application API',version='1.0.0',lifespan=lifespan)
     app.state.settings=settings
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=[h.strip() for h in settings.trusted_hosts.split(',') if h.strip()])
     app.add_middleware(CORSMiddleware,allow_origins=[o.strip() for o in settings.cors_origins.split(',') if o.strip()],
                        allow_credentials=False,allow_methods=['GET','POST','PATCH'],
@@ -157,7 +199,12 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             raise HTTPException(413,'Webhook payload is too large')
         if settings.is_demo:
             raise HTTPException(404,'Real payment webhooks are disabled in demo mode')
-        payments.verify_signature(raw,request.headers.get('X-Razorpay-Signature'),settings.razorpay_webhook_secret)
+        try:
+            payments.verify_signature(raw,request.headers.get('X-Razorpay-Signature'),settings.razorpay_webhook_secret)
+        except HTTPException as exc:
+            if exc.status_code==401:
+                request.app.state.webhook_throttle.check(request.client.host if request.client else '')
+            raise
         return await asyncio.to_thread(payments.process_webhook,request.app.state.db,request.app.state.provider,raw,request.headers.get('X-Razorpay-Event-Id'))
 
     # Device routes and MQTT bridge share the canonical wire contract.

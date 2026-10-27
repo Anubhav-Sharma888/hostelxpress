@@ -266,6 +266,26 @@ def tick(db):
                 if order['status']=='Paid' and not order['is_demo']:
                     enqueue_unlock(conn,order,bot)
             dispatch(conn,bot['id'])
+        # A dispatched bot requeues its unloaded reservations while their rider
+        # deadline still runs; without re-reservation such an order could never
+        # reach a bot again and would fail deterministically at that deadline.
+        waiting = conn.execute("SELECT * FROM public.orders WHERE bot_id IS NULL AND status='Pending' AND rider_due_at>now() ORDER BY id FOR UPDATE SKIP LOCKED").fetchall()
+        for order in waiting:
+            for bot in conn.execute("SELECT * FROM public.bots WHERE status IN ('IDLE_AT_GATE','LOADING') AND is_demo=%s ORDER BY id FOR UPDATE SKIP LOCKED",(order['is_demo'],)).fetchall():
+                if not safe_bot(conn,bot):
+                    continue
+                occupied = {r['compartment_id'] for r in conn.execute('SELECT compartment_id FROM public.orders WHERE bot_id=%s AND compartment_released_at IS NULL',(bot['id'],)).fetchall()}
+                for candidate in range(1,4):
+                    if candidate in occupied:
+                        continue
+                    state = conn.execute('SELECT * FROM hostelxpress_private.compartment_state WHERE bot_id=%s AND compartment_id=%s',(bot['id'],candidate)).fetchone()
+                    if state and state['is_empty'] is True and state['outer_closed'] is True and state['inner_closed'] is True:
+                        conn.execute('UPDATE public.orders SET bot_id=%s,compartment_id=%s WHERE id=%s',(bot['id'],candidate,order['id']))
+                        event(conn,order['id'],'Pending','Re-reserved on an available bot; original rider deadline kept')
+                        break
+                else:
+                    continue
+                break
         queued=conn.execute("SELECT * FROM public.orders WHERE bot_id IS NULL AND status='Pending' AND rider_due_at<=now() ORDER BY id FOR UPDATE SKIP LOCKED").fetchall()
         for order in queued:
             conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show' WHERE id=%s",(order['id'],))

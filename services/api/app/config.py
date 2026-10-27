@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=None, extra='ignore')
+    # OS environment wins over the optional checkout-root .env file, which the
+    # operator maintains manually; it is gitignored and never reviewed or synced.
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
     app_env: str = 'production'
     database_url: str
     supabase_url: str = ''

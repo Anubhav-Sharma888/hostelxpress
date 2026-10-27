@@ -216,6 +216,11 @@ def install_routes(app):
             raise HTTPException(413,'Device messages must not exceed 16 KiB')
         def apply():
             with request.app.state.db.connection() as conn:
-                verify_http(conn,bot_id,raw,request.headers.get('X-Device-Timestamp'),request.headers.get('X-Device-Signature'),request.url.path)
+                try:
+                    verify_http(conn,bot_id,raw,request.headers.get('X-Device-Timestamp'),request.headers.get('X-Device-Signature'),request.url.path)
+                except HTTPException as exc:
+                    if exc.status_code==401:
+                        request.app.state.device_throttle.check(request.client.host if request.client else '')
+                    raise
                 return ingest(conn,bot_id,raw)
         return await asyncio.to_thread(apply)

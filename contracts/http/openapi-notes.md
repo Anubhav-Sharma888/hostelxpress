@@ -98,7 +98,7 @@ The required shared fields are those shown above. Responses may additionally inc
 
 Order statuses are exactly `Pending`, `Loaded`, `Transit`, `Arrived`, `Paid`, `Completed`, `Failed`. `payment_status` is `Pending`, `Authorized`, `Captured`, `Failed`, `Refunded`, or null. A payment's authorized state is not captured payment and cannot unlock collection. `Failed` does not imply an occupied compartment is reusable.
 
-`parcel_label` is optional and at most 120 characters. The server validates the destination and assigns the bot/compartment. `Idempotency-Key` is a required UUID header on order creation: retries for the same user/key/body return the existing result; reusing that key with a different body conflicts. A key from a different user cannot retrieve the first user's order.
+`parcel_label` is optional and at most 120 characters. The server validates the destination's length only today; the authorized hostel set is an integration input and is not enforced yet. The server assigns the bot/compartment. `Idempotency-Key` is a required UUID header on order creation: retries for the same user/key/body return the existing result; reusing that key with a different body conflicts. A key from a different user cannot retrieve the first user's order.
 
 ### Payment
 

@@ -29,7 +29,7 @@ The robotics team owns Gazebo, maps, navigation, routes, motor control, firmware
 | `tests/integration/mqtt_tls_proof.py` | Opt-in real Mosquitto TLS transport proof of the hardware interface |
 | `.github/workflows/phase1.yml` | Linux backend/contract checks and app typecheck/test/export |
 
-Phases 0 and 1 are implemented and locally validated. The demo never contacts Supabase, Razorpay, HiveMQ, camera storage, or hardware; demo controls are loopback-only. The local Git repository is initialized on `main`, with no commits or remote configured. No GitHub repository or cloud resources have been created. See `docs/phase1-review.md` for the phase record.
+Phases 0 and 1 are implemented and locally validated. The demo never contacts Supabase, Razorpay, HiveMQ, camera storage, or hardware; demo controls are loopback-only. The repository is published at https://github.com/Anubhav-Sharma888/hostelxpress (private by default), where both Linux CI workflows run on every push. Cloud credentials stay out of the repository in the operator's `.env`. See `docs/phase1-review.md` for the phase record.
 
 ## Canonical Linux workspace
 
@@ -80,7 +80,7 @@ psql -X --set ON_ERROR_STOP=1 --file supabase/init.sql
 HOSTELXPRESS_TEST_DATABASE=disposable bash scripts/check_phase0.sh --database
 ```
 
-Fixture initialization changes that disposable database; assertions roll back their test data. Do not point these commands at a production database. The GitHub workflow is configured to supply its own disposable PostgreSQL service and run all three steps. It has not been run on GitHub.
+Fixture initialization changes that disposable database; assertions roll back their test data. Do not point these commands at a production database. The GitHub workflow supplies its own disposable PostgreSQL service and runs all three steps; it has passed on GitHub since the initial publication.
 
 ## Validation status
 
@@ -92,7 +92,7 @@ The following checks passed in the canonical Ubuntu 22.04.5 WSL 2 checkout on 27
 - On disposable PostgreSQL **17.11**, the initialization and SQL/RLS assertions passed. A real two-session compartment reservation race produced one winner and one unique-constraint rejection. A repeated initialization failed safely with the four application tables intact.
 - The temporary database used a private Unix socket with TCP disabled; the cluster was stopped after verification.
 
-GitHub CI has not run. Real Supabase Auth/API integration, live HiveMQ permissions, Razorpay sandbox behavior, and a running application have not been tested or implemented in Phase 0. The PostgreSQL fixture validates the database contract rather than substituting for Supabase Auth.
+GitHub CI runs on every push to the published repository and passed on its first run (27 October 2026). Real Supabase Auth/API integration, live HiveMQ permissions, Razorpay sandbox behavior, and a running application were not part of Phase 0 and follow the Phase 2 configuration work. The PostgreSQL fixture validates the database contract rather than substituting for Supabase Auth.
 
 ## Phase 1 validation status
 

@@ -60,5 +60,6 @@ jobs:
           cache-dependency-path: apps/student/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run export:web

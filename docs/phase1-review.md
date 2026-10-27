@@ -47,7 +47,7 @@ Observed in the canonical Ubuntu 22.04.5 WSL 2 checkout on 27 October 2026. Pyth
 - Real Supabase Auth (asymmetric JWKS verification is implemented but validated only against fixtures), live HiveMQ ACL/TLS behavior, Razorpay sandbox QR creation and webhook delivery, and private incident video storage each require configured-environment integration checks.
 - Native Android/iOS device builds, accessibility assistive-technology testing, and store distribution remain untested; the browser journeys do not establish device behavior.
 - The delivery-platform OTP verifier, real hostel names, arrival conditions, and surveyed campus geometry remain external inputs. The schematic in the app is illustrative.
-- GitHub CI has not run; no cloud credentials exist in the repository.
+- GitHub CI runs on every push to the published private repository and passed on its first run (27 October 2026); no cloud credentials exist in the repository.
 - The dependency audit findings recorded in `apps/student/README.md` must be reassessed before production packaging.
 
 Phase 1 stops here for the user's review. Phase 2 (live authentication/payment configuration and backend hardening) begins only after explicit approval.

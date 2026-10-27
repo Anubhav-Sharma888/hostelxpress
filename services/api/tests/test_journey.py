@@ -97,3 +97,32 @@ def test_unassigned_pending_order_keeps_and_expires_original_deadline(client,boo
     expired=client.get('/v1/orders/'+order['id'],headers=headers).json()
     assert expired['status']=='Failed' and expired['failure_reason']=='rider_no_show'
     assert expired['bot_id'] is None and expired['compartment_released_at'] is None
+
+
+def test_dispatch_requeues_and_tick_re_reserves_on_an_available_bot(client,booking,db):
+    headers,loaded=booking(parcel_label='Travels now')
+    _,left_behind=booking(parcel_label='Waits for the next bot')
+    assert loaded['compartment_id']!=left_behind['compartment_id']
+    advance(client,headers,loaded['id'],'load')
+    with db.connection() as conn:
+        # The batch rider loaded a minute ago, so the batch deadline passes
+        # before this later rider's independent five-minute deadline expires.
+        conn.execute("UPDATE public.bots SET load_started_at=now()-interval '1 minute',load_deadline_at=now()+interval '4 minutes' WHERE is_demo=true")
+    assert advance(client,headers,loaded['id'],'dispatch')['status']=='Transit'
+    with db.connection() as conn:
+        detached=conn.execute('SELECT bot_id,compartment_id,rider_due_at FROM public.orders WHERE id=%s',(left_behind['id'],)).fetchone()
+        assert detached['bot_id'] is None and detached['compartment_id'] is None
+        original_deadline=detached['rider_due_at']
+        spare=uuid4()  # Another bot arrives at the gate with fresh, safe telemetry.
+        conn.execute("INSERT INTO public.bots(id,status,battery_level,is_demo,last_seen_at) VALUES(%s,'IDLE_AT_GATE',97,true,now())",(spare,))
+        conn.execute('INSERT INTO hostelxpress_private.device_state(bot_id,clock_synchronized) VALUES(%s,true)',(spare,))
+        for compartment in range(1,4):
+            conn.execute('INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,true,now())',(spare,compartment))
+    service.tick(db)
+    with db.connection() as conn:
+        row=conn.execute('SELECT bot_id,compartment_id,status,rider_due_at FROM public.orders WHERE id=%s',(left_behind['id'],)).fetchone()
+        assert row['bot_id']==spare and row['compartment_id'] in (1,2,3)
+        assert row['status']=='Pending' and row['rider_due_at']==original_deadline
+        events=conn.execute("SELECT label FROM public.order_events WHERE order_id=%s ORDER BY at",(left_behind['id'],)).fetchall()
+        assert any('Re-reserved' in item['label'] for item in events)
+        assert any('original rider deadline retained' in item['label'] for item in events)
