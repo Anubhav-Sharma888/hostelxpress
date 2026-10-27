@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: hostelxpress-device-link
+Version: 0.1.0
+Summary: Communication adapter for Hostelxpress hardware integration; no navigation or actuation implementation
+Requires-Python: >=3.10
+Requires-Dist: paho-mqtt==2.1.0
+Requires-Dist: jsonschema[format-nongpl]==4.25.1

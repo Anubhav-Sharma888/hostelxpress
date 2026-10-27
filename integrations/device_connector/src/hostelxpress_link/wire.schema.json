@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hostelxpress:mqtt:wire:v1",
+  "title": "Hostelxpress MQTT v1 payload",
+  "description": "Payload validation only. Enforce topic identity, time comparisons, authorization, replay protection and business state separately.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/command"
+    },
+    {
+      "$ref": "#/$defs/telemetry"
+    },
+    {
+      "$ref": "#/$defs/state"
+    },
+    {
+      "$ref": "#/$defs/event"
+    },
+    {
+      "$ref": "#/$defs/ack"
+    },
+    {
+      "$ref": "#/$defs/availability"
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "maxLength": 40
+    },
+    "compartment": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "message_type",
+        "message_id",
+        "bot_id",
+        "sent_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "message_type": {
+          "type": "string"
+        },
+        "message_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "bot_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sent_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "command": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "issued_at",
+        "expires_at",
+        "order_id",
+        "command",
+        "compartment"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "command"
+        },
+        "issued_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "order_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "command": {
+          "enum": [
+            "unlock_outer",
+            "unlock_inner"
+          ]
+        },
+        "compartment": {
+          "$ref": "#/$defs/compartment"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "telemetry": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "boot_id",
+        "sequence",
+        "observed_at",
+        "current_lat",
+        "current_lng",
+        "battery_level"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "telemetry"
+        },
+        "boot_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "current_lat": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -90,
+          "maximum": 90
+        },
+        "current_lng": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -180,
+          "maximum": 180
+        },
+        "battery_level": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "clock_synchronized": {
+          "type": "boolean"
+        },
+        "compartments": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/compartment_sensor"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "compartment"
+                ],
+                "properties": {
+                  "compartment": {
+                    "const": 1
+                  }
+                }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "compartment"
+                ],
+                "properties": {
+                  "compartment": {
+                    "const": 2
+                  }
+                }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "compartment"
+                ],
+                "properties": {
+                  "compartment": {
+                    "const": 3
+                  }
+                }
+              },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "current_lat": {
+              "type": "null"
+            },
+            "current_lng": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "current_lat": {
+              "type": "number"
+            },
+            "current_lng": {
+              "type": "number"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "state": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "boot_id",
+        "sequence",
+        "observed_at",
+        "status"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "state"
+        },
+        "boot_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sequence": {
+          "$ref": "#/$defs/sequence"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "status": {
+          "enum": [
+            "IDLE_AT_GATE",
+            "LOADING",
+            "TRANSIT",
+            "AT_HOSTEL",
+            "UNLOCKED",
+            "RETURNING",
+            "FAULT_MODE"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "observed_at",
+        "event_type"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "event"
+        },
+        "observed_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "event_type": {
+          "enum": [
+            "outer_lid_opened",
+            "outer_lid_closed",
+            "inner_lid_opened",
+            "inner_lid_closed",
+            "parcel_loaded",
+            "arrived",
+            "forced_lid",
+            "collision",
+            "stuck",
+            "camera_evidence_uploaded",
+            "camera_buffer_deleted"
+          ]
+        },
+        "order_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "compartment": {
+          "$ref": "#/$defs/compartment"
+        },
+        "command_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "incident_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "evidence_object_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^incidents/[0-9a-f-]{36}/[0-9a-f-]{36}/[A-Za-z0-9_-]+\\.(mp4|h264)$"
+        },
+        "evidence_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "outer_closed": {
+          "type": "boolean"
+        },
+        "inner_closed": {
+          "type": "boolean"
+        },
+        "is_empty": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "outer_lid_opened",
+                  "outer_lid_closed",
+                  "inner_lid_opened",
+                  "inner_lid_closed",
+                  "parcel_loaded",
+                  "camera_buffer_deleted"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "order_id",
+              "compartment"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "inner_lid_opened",
+                  "inner_lid_closed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "command_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "camera_evidence_uploaded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "evidence_object_key",
+              "evidence_sha256"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "forced_lid",
+                  "collision",
+                  "stuck",
+                  "camera_evidence_uploaded"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "incident_id"
+            ]
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ack": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "command_id",
+        "order_id",
+        "compartment",
+        "result"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "ack"
+        },
+        "command_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "order_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "compartment": {
+          "$ref": "#/$defs/compartment"
+        },
+        "result": {
+          "enum": [
+            "accepted",
+            "executed",
+            "rejected"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "expired",
+            "future_timestamp",
+            "retained",
+            "clock_unsynchronized",
+            "wrong_assignment",
+            "unsafe_lid",
+            "fault_active",
+            "invalid_state",
+            "execution_uncertain",
+            "actuator_failed"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "result": {
+            "const": "rejected"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "reason"
+          ]
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "availability": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "boot_id",
+        "online"
+      ],
+      "properties": {
+        "message_type": {
+          "const": "availability"
+        },
+        "boot_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "online": {
+          "type": "boolean"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "compartment_sensor": {
+      "type": "object",
+      "required": [
+        "compartment",
+        "outer_closed",
+        "inner_closed",
+        "is_empty"
+      ],
+      "properties": {
+        "compartment": {
+          "$ref": "#/$defs/compartment"
+        },
+        "outer_closed": {
+          "type": "boolean"
+        },
+        "inner_closed": {
+          "type": "boolean"
+        },
+        "is_empty": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hostelxpress-device-link"
+version = "0.1.0"
+description = "Communication adapter for Hostelxpress hardware integration; no navigation or actuation implementation"
+requires-python = ">=3.10"
+dependencies = ["paho-mqtt==2.1.0", "jsonschema[format-nongpl]==4.25.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hostelxpress_link = ["wire.schema.json"]

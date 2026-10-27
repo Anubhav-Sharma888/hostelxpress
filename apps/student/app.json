@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Hostelxpress",
+    "slug": "hostelxpress-student",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/brand-icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand-icon.png",
+        "backgroundColor": "#164B3B"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/brand-icon.png"
+    },
+    "scheme": "hostelxpress",
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

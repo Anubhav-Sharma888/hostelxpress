@@ -1,0 +1,52 @@
+name: Phase 0 Linux checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: hostelxpress_test
+          # Disposable CI credentials. No cloud credentials are used.
+          POSTGRES_PASSWORD: phase0_disposable_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hostelxpress_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: hostelxpress_test
+      PGPASSWORD: phase0_disposable_only
+      HOSTELXPRESS_TEST_DATABASE: disposable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends shellcheck postgresql-client python3-venv
+          python3 -m venv .tools/checks
+          .tools/checks/bin/python -m pip install -r requirements-phase0.txt
+      - name: Initialize disposable PostgreSQL fixture
+        run: |
+          psql -X --set ON_ERROR_STOP=1 --file supabase/tests/bootstrap_local_auth.sql
+          psql -X --set ON_ERROR_STOP=1 --file supabase/init.sql
+      - name: Validate shell, payloads, constraints, and RLS
+        run: |
+          source .tools/checks/bin/activate
+          bash scripts/check_phase0.sh --database

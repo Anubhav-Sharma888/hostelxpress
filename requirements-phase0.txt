@@ -1,0 +1,3 @@
+# Test tooling only; application dependencies are selected in a later phase.
+# Explicit stable pin, not a claim that this is the latest available release.
+jsonschema[format-nongpl]==4.25.1
