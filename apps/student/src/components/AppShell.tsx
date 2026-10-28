@@ -54,7 +54,7 @@ export function AppShell() {
           {desktop && <View style={{width:1,height:24,backgroundColor:C.line}}/>}
           <Pressable accessibilityRole="button" accessibilityLabel="Open my profile" onPress={()=>router.push('/profile')} style={{flexDirection:'row',alignItems:'center',gap:10}}>
             <View style={{height:32,width:32,borderRadius:16,backgroundColor:'#E2E9D9',alignItems:'center',justifyContent:'center'}}><T style={{fontFamily:'DMSansBold',fontSize:11,color:C.forest}}>{user?.name.slice(0,1).toUpperCase()}</T></View>
-            {desktop && <View><T style={{fontFamily:'DMSansBold',fontSize:11,lineHeight:16}}>{user?.name}</T><T style={{fontSize:9,lineHeight:13,color:C.muted}}>Hostel {user?.hostel_block}</T></View>}
+            {desktop && <View><T style={{fontFamily:'DMSansBold',fontSize:11,lineHeight:16}}>{user?.name}</T><T style={{fontSize:9,lineHeight:13,color:C.muted}}>{user?.hostel_block?'Hostel '+user.hostel_block:'Hostel not set'}</T></View>}
           </Pressable>
         </View>
       </View>

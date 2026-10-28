@@ -18,6 +18,7 @@ export default function Overview() {
   return <View>
     <PageTitle eyebrow="Your campus, connected" title={'Good day, '+(user?.name.split(' ')[0]||'there')+'.'} description="Less waiting at the gate. More time for you." action={<Button icon="add-outline" variant="orange" onPress={()=>setBooking(true)} testID="booking-open">Book a delivery</Button>}/>
     {error&&<View style={{marginBottom:20}}><ErrorNotice message={error} retry={()=>void refresh()}/></View>}
+    {session.mode==='real'&&user&&!user.hostel_block&&<View style={{marginBottom:20}}><Card style={{flexDirection:'row',alignItems:'center',gap:12,padding:16,flexWrap:'wrap'}}><Icon name="person-circle-outline" size={20}/><T style={{fontSize:12,flex:1,minWidth:200}}>Your hostel block is not set yet. Add it so deliveries reach the right place.</T><Button small variant="secondary" icon="create-outline" onPress={()=>router.push('/profile?edit=1')} testID="profile-complete-cta">Complete your profile</Button></Card></View>}
     {loading&&!updatedAt?<Loading/>:<>
       <View style={{flexDirection:wide?'row':'column',gap:21}}>
         <Card style={{flex:wide?2.08:undefined,padding:22,gap:19,minWidth:0}}>
@@ -25,7 +26,7 @@ export default function Overview() {
           <View style={{maxWidth:470}}><Heading style={{fontSize:26,lineHeight:34,letterSpacing:-1}}>{active?STATUS_COPY[active.status].title:'The last stretch, sorted.'}</Heading><T style={{marginTop:7,color:C.muted,fontSize:12,lineHeight:20}}>{active?STATUS_COPY[active.status].description:'From Gate 2 to your hostel. Reserve a secure compartment and let your parcel come to you.'}</T></View>
           <CampusMap status={active?.status} hostel={active?.destination_hostel_block||user?.hostel_block||'C'}/>
           <View style={[common.between,{flexWrap:'wrap',gap:9}]}>
-            <View style={{flexDirection:'row',alignItems:'center',gap:9}}><Icon name="location-outline" size={17}/><T style={{fontSize:11,fontFamily:'DMSansMedium'}}>Gate 2</T><Icon name="arrow-forward-outline" size={13} color="#93A08D"/><T style={{fontSize:11,fontFamily:'DMSansMedium'}}>Hostel {active?.destination_hostel_block||user?.hostel_block}</T></View>
+            <View style={{flexDirection:'row',alignItems:'center',gap:9}}><Icon name="location-outline" size={17}/><T style={{fontSize:11,fontFamily:'DMSansMedium'}}>Gate 2</T><Icon name="arrow-forward-outline" size={13} color="#93A08D"/><T style={{fontSize:11,fontFamily:'DMSansMedium'}}>Hostel {active?.destination_hostel_block||user?.hostel_block||'—'}</T></View>
             {active?<Pressable accessibilityRole="button" accessibilityLabel="Open active delivery" onPress={()=>router.push({pathname:'/order/[id]',params:{id:active.id}})} style={{flexDirection:'row',gap:6,alignItems:'center'}}><T style={{fontFamily:'DMSansBold',fontSize:11,color:C.forest}}>View delivery</T><Icon name="arrow-forward-outline" size={14}/></Pressable>:<T style={{fontSize:10,color:C.muted}}>No active delivery yet</T>}
           </View>
         </Card>
@@ -49,7 +50,7 @@ export default function Overview() {
       </View>
       <Card style={{marginTop:23,padding:23}}>
         <View style={common.between}><View><Heading style={{fontSize:18,lineHeight:26,letterSpacing:-.5}}>Recent deliveries</Heading><T style={{fontSize:11,color:C.muted,marginTop:3}}>The little journeys that make your day.</T></View><Pressable accessibilityRole="link" accessibilityLabel="View all deliveries" onPress={()=>router.push('/deliveries')}><T style={{fontSize:11,fontFamily:'DMSansBold',color:C.forest}}>View all →</T></Pressable></View>
-        {orders.length?orders.slice(0,3).map(order=><OrderCard key={order.id} order={order} compact/>):<View style={{paddingVertical:28,alignItems:'center',gap:9}}><Icon name="cube-outline" size={27} color="#A5B399"/><T style={{fontSize:12,color:C.muted}}>Your first delivery starts here.</T><T style={{fontSize:10,color:'#98A08F'}}>Book a delivery to see its journey in this space.</T></View>}
+        {orders.length?orders.slice(0,3).map(order=><OrderCard key={order.id} order={order} compact/>):<View style={{paddingVertical:28,alignItems:'center',gap:9}}><Icon name="cube-outline" size={27} color="#A5B399"/><T style={{fontSize:12,color:C.muted}}>Your first delivery starts here.</T><T style={{fontSize:10,color:'#687268'}}>Book a delivery to see its journey in this space.</T></View>}
       </Card>
     </>}
     {booking&&<BookModal onClose={()=>setBooking(false)}/>}

@@ -66,6 +66,10 @@ curl --fail --silent http://127.0.0.1:8000/health > /dev/null || { tail -n 30 "$
 if ! curl --fail --silent http://127.0.0.1:8081/ > /dev/null; then
   (
     cd apps/student
+    # The demo web bundle must always run in demo mode; empty process-env
+    # values override a developer .env that configures real Supabase sign-in.
+    export EXPO_PUBLIC_SUPABASE_URL=
+    export EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
     nohup setsid npm run web -- --host localhost --port 8081 > "$demo_root/student.log" 2>&1 < /dev/null &
     printf '%s\n' "$!" > "$demo_root/student.pid"
   )

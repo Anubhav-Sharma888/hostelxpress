@@ -3,21 +3,19 @@ import {KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, useWin
 import {router} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AUTH_MODE} from '../api';
+import {HostelPicker} from '../components/HostelPicker';
 import {Wordmark} from '../components/AppShell';
 import {CampusMap} from '../components/CampusMap';
 import {COLORS as C} from '../model';
 import {useApp} from '../state';
 import {Button, common, ErrorNotice, Heading, Icon, Label, Pill, T} from '../ui';
 
-function HostelPicker({hostel, setHostel, note}: {hostel: string; setHostel: (value: string) => void; note: string}) {
-  return <View style={{gap:9}}><Label>Your hostel</Label><View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{['A','B','C','D','E','F','G'].map(item=><Pressable key={item} accessibilityRole="radio" accessibilityState={{selected:hostel===item}} accessibilityLabel={'Hostel '+item} onPress={()=>setHostel(item)} style={{width:43,height:43,borderRadius:10,borderWidth:1,borderColor:hostel===item?C.forest:C.line,backgroundColor:hostel===item?C.forest:C.white,alignItems:'center',justifyContent:'center'}}><T style={{fontFamily:'DMSansBold',color:hostel===item?C.white:C.ink}}>{item}</T></Pressable>)}</View><T style={{fontSize:10,color:C.muted}}>{note}</T></View>;
-}
 function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: string) => void}) {
   const {signIn} = useApp(); const [name,setName]=useState('Anubhav');
   const [busy,setBusy]=useState(false); const [error,setError]=useState<string|null>(null);
   async function submit() {if(busy||!name.trim())return;setBusy(true);setError(null);try{await signIn(name,hostel);router.replace('/');}catch(err){setError((err as Error).message);}finally{setBusy(false);}}
   return <View style={{gap:17}}>
-    <View><Label>Your name</Label><TextInput testID="name-input" accessibilityLabel="Your name" autoComplete="name" textContentType="givenName" value={name} onChangeText={setName} maxLength={80} style={[common.input,{marginTop:8}]}/></View>
+    <View><Label>Your name</Label><TextInput testID="name-input" accessibilityLabel="Your name" autoComplete="name" textContentType="givenName" value={name} onChangeText={setName} maxLength={80} returnKeyType="next" style={[common.input,{marginTop:8}]}/></View>
     <HostelPicker hostel={hostel} setHostel={setHostel} note="Demo hostel labels A–G, not a configured campus."/>
     {error&&<ErrorNotice message={error}/>}
     <Button variant="orange" icon="arrow-forward-outline" onPress={()=>void submit()} loading={busy} disabled={!name.trim()} testID="sign-in-submit">Enter demo workspace</Button>
@@ -36,9 +34,9 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
     catch(err){setError((err as Error).message);}finally{setBusy(false);}
   }
   return <View style={{gap:17}}>
-    {create&&<View><Label>Your name</Label><TextInput testID="name-input" accessibilityLabel="Your name" autoComplete="name" textContentType="name" value={name} onChangeText={setName} maxLength={80} style={[common.input,{marginTop:8}]}/></View>}
-    <View><Label>Email</Label><TextInput testID="email-input" accessibilityLabel="Email" autoComplete="email" keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" value={email} onChangeText={setEmail} maxLength={254} style={[common.input,{marginTop:8}]}/></View>
-    <View><Label>Password</Label><TextInput testID="password-input" accessibilityLabel="Password" secureTextEntry autoComplete={create?'new-password':'current-password'} textContentType={create?'newPassword':'password'} value={password} onChangeText={setPassword} maxLength={72} style={[common.input,{marginTop:8}]}/></View>
+    {create&&<View><Label>Your name</Label><TextInput testID="name-input" accessibilityLabel="Your name" autoComplete="name" textContentType="name" value={name} onChangeText={setName} maxLength={80} returnKeyType="next" style={[common.input,{marginTop:8}]}/></View>}
+    <View><Label>Email</Label><TextInput testID="email-input" accessibilityLabel="Email" autoComplete="email" keyboardType="email-address" autoCapitalize="none" textContentType="emailAddress" value={email} onChangeText={setEmail} maxLength={254} returnKeyType="next" style={[common.input,{marginTop:8}]}/></View>
+    <View><Label>Password</Label><TextInput testID="password-input" accessibilityLabel="Password" secureTextEntry autoComplete={create?'new-password':'current-password'} textContentType={create?'newPassword':'password'} value={password} onChangeText={setPassword} maxLength={72} returnKeyType="go" returnKeyLabel={create?'Create account':'Sign in'} onSubmitEditing={()=>void submit()} style={[common.input,{marginTop:8}]}/></View>
     {create&&<HostelPicker hostel={hostel} setHostel={setHostel} note="Hostel blocks A–G, not a configured campus."/>}
     {error&&<ErrorNotice message={error}/>}
     <Button variant="orange" icon="arrow-forward-outline" onPress={()=>void submit()} loading={busy} disabled={!email.trim()||!password||(create&&!name.trim())} testID={create?'sign-up-submit':'sign-in-submit'}>{create?'Create account':'Sign in'}</Button>

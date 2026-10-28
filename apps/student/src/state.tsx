@@ -5,6 +5,7 @@ import {ApiError, AUTH_MODE, DemoAction, Order, request, Session, supabase, User
 type AppStateValue = {
   session: Session | null; user: User | null; orders: Order[]; loading: boolean; error: string | null; updatedAt: number | null;
   signIn: (email: string, password: string) => Promise<void>; signUp: (email: string, password: string, name: string, hostel: string) => Promise<void>;
+  updateProfile: (patch: {name?: string; hostel_block: string}) => Promise<User>;
   signOut: () => void;
   refresh: () => Promise<void>; createOrder: (label: string, hostel: string, key: string) => Promise<Order>;
   advance: (id: string, action: DemoAction) => Promise<Order>;
@@ -91,6 +92,14 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     setSession({access_token: token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: profile});
     setUser(profile); setOrders([]); setError(null);
   };
+  const updateProfile = async (patch: {name?: string; hostel_block: string}) => {
+    if (!session) throw new Error('Please sign in first.');
+    const current = generation.current;
+    const profile = await request<User>('/v1/me', session.access_token, {method: 'PATCH', body: patch});
+    if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your profile.');
+    setUser(profile); setSession(latest => latest ? {...latest, user: profile} : latest);
+    return profile;
+  };
   const upsert = (order: Order) => setOrders(current => [order, ...current.filter(item => item.id !== order.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
   const createOrder = async (label: string, hostel: string, key: string) => {
     if (!session) throw new Error('Please sign in first.');
@@ -108,6 +117,6 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your deliveries.');
     upsert(order); void refresh(); return order;
   };
-  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signUp,signOut,refresh,createOrder,advance}}>{children}</Context.Provider>;
+  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signUp,updateProfile,signOut,refresh,createOrder,advance}}>{children}</Context.Provider>;
 }
 export function useApp() {const value = useContext(Context); if (!value) throw new Error('AppProvider is required.'); return value;}
