@@ -14,7 +14,8 @@
         "foregroundImage": "./assets/brand-icon.png",
         "backgroundColor": "#164B3B"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.hostelxpressstudent"
     },
     "web": {
       "bundler": "metro",
@@ -24,7 +25,8 @@
     "scheme": "hostelxpress",
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "./plugins/withAndroidNetwork.cjs"
     ],
     "experiments": {
       "typedRoutes": true

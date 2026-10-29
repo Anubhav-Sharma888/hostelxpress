@@ -4,6 +4,10 @@ The student application, application backend, payments, database, and hardware/s
 
 The robotics team owns Gazebo, maps, navigation, routes, motor control, firmware, and physical hardware integration. This project consumes device telemetry and defines the authenticated commands/events needed for application behavior.
 
+## Current progress
+
+See [the current progress record](docs/progress.md) for the latest implementation status, verification and remaining inputs. Phases 0–2 have review records; Phase 3 application work is being verified for Android QA. Physical phone acceptance, live payment confirmation and hardware commissioning remain separate checks.
+
 ## Phase 0 deliverables
 
 | Path | Purpose |
@@ -29,7 +33,7 @@ The robotics team owns Gazebo, maps, navigation, routes, motor control, firmware
 | `tests/integration/mqtt_tls_proof.py` | Opt-in real Mosquitto TLS transport proof of the hardware interface |
 | `.github/workflows/phase1.yml` | Linux backend/contract checks and app typecheck/test/export |
 
-Phases 0 and 1 are implemented and locally validated. The demo never contacts Supabase, Razorpay, HiveMQ, camera storage, or hardware; demo controls are loopback-only. The repository is published at https://github.com/Anubhav-Sharma888/hostelxpress (private by default), where both Linux CI workflows run on every push. Cloud credentials stay out of the repository in the operator's `.env`. See `docs/phase1-review.md` for the phase record.
+The local foundation is implemented and validated. The demo never contacts Supabase, Razorpay, HiveMQ, camera storage, or hardware; demo controls are loopback-only. The repository is published at https://github.com/Anubhav-Sharma888/hostelxpress, where Linux CI workflows run on every push. Cloud credentials stay out of the repository. See `docs/phase1-review.md`, `docs/phase2-review.md` and `docs/phase3-review.md` for dated evidence and acceptance limits.
 
 ## Canonical Linux workspace
 
@@ -108,7 +112,7 @@ These checks do not establish real Supabase Auth/API, live HiveMQ ACL/TLS, Razor
 
 ## Approval gates and estimates
 
-The original robotics phases are outside this application's scope. Phase 0 was approved and completed, and the user's approval of 27 October 2026 authorized Phase 1, which is now complete and awaiting review. Phase 2 (live authentication/payment configuration and backend hardening) begins only after explicit approval of the Phase 1 review.
+The original robotics phases are outside this application's scope. The application roadmap and dated review records define progress. The user authorized autonomous continuation through the application phases on 28 October and publication of the verified checkpoint on 29 October 2026. Device tests, live service changes and deployment still require their own evidence and applicable user action; an engineering checkpoint does not imply physical acceptance.
 
 Planning estimate for one experienced engineer, full time, with prompt access to test accounts and a device protocol agreed with the robotics team:
 

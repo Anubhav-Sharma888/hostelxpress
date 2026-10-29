@@ -1,6 +1,7 @@
 import React, {createContext, useCallback, useContext, useEffect, useRef, useState} from 'react';
 import {AppState} from 'react-native';
 import {ApiError, AUTH_MODE, DemoAction, Order, request, Session, supabase, User} from './api';
+import {fetchProfileWithOnboarding, signUpWithProfile} from './signup';
 
 type AppStateValue = {
   session: Session | null; user: User | null; orders: Order[]; loading: boolean; error: string | null; updatedAt: number | null;
@@ -67,7 +68,10 @@ export function AppProvider({children}: {children: React.ReactNode}) {
       if (error || !data.session) throw new Error(error?.message || 'We could not sign you in. Please check your email and password.');
       if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
       setLoading(true);
-      const profile = await request<User>('/v1/me', data.session.access_token);
+      const profile = await fetchProfileWithOnboarding(
+        {request, isCurrent: () => alive.current && current === generation.current},
+        data.session.access_token, data.session.user?.user_metadata,
+      );
       if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
       setSession({access_token: data.session.access_token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: profile});
       setUser(profile); setOrders([]); setError(null);
@@ -80,17 +84,17 @@ export function AppProvider({children}: {children: React.ReactNode}) {
   const signUp = async (email: string, password: string, name: string, hostel: string) => {
     if (AUTH_MODE !== 'real') throw new Error('Account creation is not available in this environment.');
     const current = ++generation.current;
-    const {data, error} = await supabase().auth.signUp({email, password});
-    if (error) throw new Error(error.message);
-    if (!data.session) throw new Error('Email confirmation is required. Confirm your email, then sign in.');
+    const result = await signUpWithProfile(
+      {auth: supabase().auth, request, isCurrent: () => alive.current && current === generation.current},
+      {email, password, name, hostel},
+    );
+    if (result.outcome === 'await-confirmation') {
+      throw new Error('Check your email and confirm your account, then sign in. Your signup details were saved. You can review or change them in Profile.');
+    }
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
     setLoading(true);
-    const token = data.session.access_token;
-    await request<User>('/v1/me', token, {method: 'PATCH', body: {name: name.trim(), hostel_block: hostel}});
-    const profile = await request<User>('/v1/me', token);
-    if (!alive.current || current !== generation.current) throw new Error('The session changed. Please sign in again.');
-    setSession({access_token: token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: profile});
-    setUser(profile); setOrders([]); setError(null);
+    setSession({access_token: result.token, token_type: 'bearer', expires_in: 3600, mode: 'real', user: result.user});
+    setUser(result.user); setOrders([]); setError(null);
   };
   const updateProfile = async (patch: {name?: string; hostel_block: string}) => {
     if (!session) throw new Error('Please sign in first.');

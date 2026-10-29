@@ -1,7 +1,14 @@
 import {defineConfig} from '@playwright/test';
 
+// Demo and real modes are mutually exclusive selections. Default runs only
+// the demo journeys against the local demo stack. HX_E2E_REAL=1 runs only
+// real-signin.spec.mjs, which signs up a throwaway account on the live
+// Supabase project and needs STUDENT_URL pointed at a real-mode web bundle.
+const realMode = process.env.HX_E2E_REAL === '1';
+
 export default defineConfig({
   testDir: './specs',
+  testIgnore: realMode ? ['**/delivery.spec.mjs'] : ['**/real-signin.spec.mjs'],
   timeout: 90000,
   expect: {timeout: 15000},
   fullyParallel: false,

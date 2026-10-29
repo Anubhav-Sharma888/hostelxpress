@@ -63,3 +63,9 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run export:web
+      - name: Verify demo and real test selection without live services
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          env -u HX_E2E_REAL node verify-selection.mjs
+          HX_E2E_REAL=1 node verify-selection.mjs

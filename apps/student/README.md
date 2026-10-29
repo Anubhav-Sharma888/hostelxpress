@@ -1,6 +1,6 @@
 # Hostelxpress student app
 
-A shared React Native / React Native Web application built with Expo SDK 58, TypeScript, and Expo Router. The current slice connects to the local FastAPI demo; it does not make real payments or operate hardware.
+A shared React Native / React Native Web application built with Expo SDK 58, TypeScript, and Expo Router. The app supports the local FastAPI demo and real Supabase sign-in against a configured backend. Demo payment never charges money or operates hardware; live payment and physical-device acceptance are separate integration checks.
 
 ## Run inside Ubuntu
 
@@ -13,11 +13,14 @@ From the repository root:
 
 The repository's demo runner starts both the API and this application. Use that runner for the integrated preview rather than starting a second copy on the same ports.
 
+`EXPO_PUBLIC_API_URL` contains the backend origin. Real sign-in additionally uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; only the public client key belongs in the app. Leave both Supabase values empty for the demo, or use the demo runner, which enforces that separation.
+
 Only the API URL belongs in EXPO_PUBLIC_API_URL. Expo inlines public environment variables into client code. Never add Supabase service-role, Razorpay, webhook, MQTT, or device credentials. Native Android previews require a reachable development-server address instead of a handset's own localhost. Use an approved device/network configuration; production must use HTTPS.
 
 ## Implemented flow
 
-- Explicit demo sign-in with editable name and demo hostel A–G.
+- Explicit demo sign-in with editable name and demo hostel A–G, plus real Supabase sign-in/sign-up when configured.
+- Registration preserves the entered name with the existing database trigger and keeps the hostel for onboarding after email confirmation. Existing saved profile fields are preserved. Legacy accounts displaying `Student` can correct their name through **Profile → Edit profile → Save changes**; the app does not guess whether a nonempty name was intentionally chosen.
 - Responsive overview, booking dialog, server-assigned compartment, order history, profile, and help.
 - Server-backed order progression through loading, dispatch, arrival, demo payment, and confirmed collection.
 - Integer-paise fee display and a nonpayable server-supplied demo QR.
@@ -51,3 +54,7 @@ Primary references:
 - https://docs.expo.dev/guides/environment-variables/
 - https://github.com/advisories/GHSA-86w9-cpqp-85rv
 - https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
+
+## Android QA builds
+
+See [Android build instructions](../../docs/android-build.md) and [the device QA checklist](../../docs/device-qa-checklist.md). Native build artifacts are machine-local and are not committed to Git. A built APK is not evidence that it has been installed or tested on a physical phone.

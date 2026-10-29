@@ -15,7 +15,7 @@ The user's Phase 0 approval authorizes Phase 1 application/backend work on 27 Oc
 
 Allow approximately 175–280 hours overall with integration contingency. These are planning estimates for engineering effort, not a promise of elapsed agent runtime. Parallel work can shorten implementation; account activation, approvals, and hardware-team availability can add waiting time. Do not double-count implementation already completed in an earlier phase when revising the remaining budget.
 
-Each phase ends at an explicit user review gate. Phase 1 does not authorize proceeding through all later phases without that review.
+Each phase has a dated review record and an integrity check. The user authorized autonomous application work through Phase 5 on 28 October 2026 (see AGENTS.md), with unavailable user and hardware inputs recorded rather than fabricated. On 29 October the user requested publication of the verified GitHub checkpoint. Phase 3 still requires actual phone QA; later engineering work must not imply that this acceptance occurred.
 
 ## Hardware integration boundary
 

@@ -1,9 +1,10 @@
 import {test, expect} from '@playwright/test';
 
 // Real-mode journey against the live Supabase project and a production backend.
-// Requires EXPO_PUBLIC_SUPABASE_* in apps/student/.env and the backend on
-// EXPO_PUBLIC_API_URL. Creates a throwaway student account, signs in twice,
-// and edits the profile name on the second session.
+// Runs only when the Playwright config is invoked with HX_E2E_REAL=1 and
+// STUDENT_URL points at a real-mode web bundle (EXPO_PUBLIC_SUPABASE_* in
+// apps/student/.env, backend on EXPO_PUBLIC_API_URL). Creates a throwaway
+// student account, signs in twice, and edits the profile name on the second session.
 
 const email = process.env.QA_EMAIL || ('qa-' + Date.now() + '@hostelxpress.test');
 const password = process.env.QA_PASSWORD || ('Hx-' + Date.now().toString(36) + '-demo');
