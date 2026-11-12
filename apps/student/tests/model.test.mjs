@@ -10,7 +10,7 @@ test('stale telemetry cannot remain fresh after the fifteen-second safety window
   assert.equal(isStale('invalid',now),true);
 });
 test('payment alone never claims an unlocked compartment',()=>{
-  assert.equal(STATUS_COPY.Paid.label,'Payment confirmed');
+  assert.equal(STATUS_COPY.Paid.label,'Payment confirmed · Waiting for unlock');
   assert.match(STATUS_COPY.Paid.description,/acknowledgement/);
 });
 test('a terminal order cannot be advanced using demo controls',()=>{

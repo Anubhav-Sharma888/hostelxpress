@@ -17,32 +17,32 @@ export function Heading({children, style}: {children: React.ReactNode; style?: S
 export function Label({children, style}: {children: React.ReactNode; style?: StyleProp<TextStyle>}) {
   return <T style={[{fontFamily: 'DMSansBold', fontSize: 10, lineHeight: 16, letterSpacing: 1.5, textTransform: 'uppercase', color: C.muted}, style]}>{children}</T>;
 }
-export function Button({children, onPress, icon, variant = 'primary', loading, disabled, small, testID}: {
-  children: string; onPress: () => void; icon?: IconName; variant?: 'primary' | 'orange' | 'secondary' | 'ghost';
-  loading?: boolean; disabled?: boolean; small?: boolean; testID?: string;
+export function Button({children, onPress, icon, variant = 'primary', loading, disabled, small, testID, accessibilityLabel, prominent}: {
+  children: string; onPress: () => void; icon?: IconName; variant?: 'primary' | 'orange' | 'secondary' | 'ghost' | 'dark';
+  loading?: boolean; disabled?: boolean; small?: boolean; testID?: string; accessibilityLabel?: string; prominent?: boolean;
 }) {
-  const light = variant === 'primary';
-  const color = light ? C.white : C.ink;
-  return <Pressable accessibilityRole="button" accessibilityLabel={children} accessibilityState={{disabled: disabled || loading}} disabled={disabled || loading} testID={testID} onPress={onPress}
-    style={({pressed}) => [{minHeight: small ? 38 : 48, paddingHorizontal: small ? 14 : 20, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
-      backgroundColor: variant === 'primary' ? C.forest : variant === 'orange' ? C.orange : variant === 'secondary' ? C.pale : 'transparent',
+  const light = variant === 'primary' || variant === 'orange';
+  const color = light ? C.onLime : variant === 'dark' ? C.white : C.ink;
+  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || children} accessibilityState={{disabled: disabled || loading}} disabled={disabled || loading} testID={testID} onPress={onPress}
+    style={({pressed}) => [{minHeight: 48, paddingHorizontal: small ? 14 : 20, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
+      backgroundColor: variant === 'primary' ? C.lime : variant === 'orange' ? C.lime : variant === 'dark' ? C.ink : variant === 'secondary' ? C.pale : 'transparent',
       borderWidth: variant === 'ghost' ? 1 : 0, borderColor: C.line, opacity: disabled || loading ? 0.55 : pressed ? 0.8 : 1}]}>
       {loading ? <ActivityIndicator size="small" color={color} /> : icon ? <Icon name={icon} color={color} size={17} /> : null}
-      <T style={{fontFamily: 'DMSansBold', color, fontSize: small ? 12 : 13}}>{children}</T>
+      <T style={{fontFamily: prominent ? 'ManropeBold' : 'DMSansBold', color, fontSize: prominent ? 20 : small ? 12 : 14, lineHeight: prominent ? 28 : 22, flexShrink: 1, minWidth: 0, textAlign: 'center'}}>{children}</T>
     </Pressable>;
 }
 export function Pill({children, tone = 'green', icon}: {children: string; tone?: 'green' | 'orange' | 'neutral' | 'red'; icon?: IconName}) {
   const foreground = tone === 'red' ? C.danger : tone === 'orange' ? '#9D542B' : tone === 'neutral' ? '#687268' : C.forest;
   const background = tone === 'red' ? '#FBE8E4' : tone === 'orange' ? C.peach : tone === 'neutral' ? C.pale : '#E8F1E8';
-  return <View style={{flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', gap: 5, backgroundColor: background, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20}}>
-    {icon && <Icon name={icon} size={12} color={foreground} />}<T style={{fontFamily: 'DMSansMedium', fontSize: 10, lineHeight: 16, color: foreground}}>{children}</T>
+  return <View style={{flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', flexShrink: 1, minWidth: 0, gap: 5, backgroundColor: background, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20}}>
+    {icon && <Icon name={icon} size={12} color={foreground} />}<T style={{fontFamily: 'DMSansMedium', fontSize: 10, lineHeight: 16, color: foreground, flexShrink: 1, minWidth: 0}}>{children}</T>
   </View>;
 }
 export function StatusPill({status}: {status: OrderStatus}) {
   return <Pill tone={status === 'Failed' ? 'red' : status === 'Arrived' || status === 'Paid' ? 'orange' : 'green'}>{STATUS_COPY[status].label}</Pill>;
 }
 export function Card({children, style}: {children: React.ReactNode; style?: StyleProp<ViewStyle>}) {
-  return <View style={[{backgroundColor: C.white, borderRadius: 17, borderWidth: 1, borderColor: C.line, padding: 23}, style]}>{children}</View>;
+  return <View style={[{backgroundColor: C.white, borderRadius: 14, borderWidth: 1, borderColor: '#F0F0F8', padding: 23}, style]}>{children}</View>;
 }
 export function ErrorNotice({message, retry}: {message: string; retry?: () => void}) {
   return <View accessibilityRole="alert" style={{backgroundColor: '#FDF0E9', borderColor: '#EDC9B9', borderWidth: 1, padding: 14, borderRadius: 10, gap: 8}}>
@@ -61,5 +61,5 @@ export const common = StyleSheet.create({
   row: {flexDirection: 'row', alignItems: 'center', gap: 12},
   between: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12},
   muted: {color: C.muted}, gap: {gap: 20}, divider: {height: 1, backgroundColor: C.line},
-  input: {fontFamily: 'DMSans', backgroundColor: C.white, color: C.ink, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 14, minHeight: 48},
+  input: {fontFamily: 'DMSans', backgroundColor: C.pale, color: C.ink, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 14, minHeight: 48},
 });

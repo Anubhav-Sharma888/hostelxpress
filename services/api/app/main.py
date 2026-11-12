@@ -13,7 +13,7 @@ from jwt import PyJWKClient
 from psycopg import Error as DatabaseError
 from psycopg.types.json import Jsonb
 
-from . import payments,service,throttle
+from . import payments,pilot,service,throttle
 from .auth import Principal,current_user,demo_token,require_local_demo
 from .config import Settings,get_settings
 from .db import Database
@@ -71,7 +71,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
         app.state.provider=payments.RazorpayProvider(settings)
         app.state.jwks=PyJWKClient(settings.issuer+'/.well-known/jwks.json',timeout=5) if not settings.is_demo else None
         with app.state.db.connection() as conn:
-            migrated=conn.execute("SELECT count(*)=2 AS ready FROM hostelxpress_private.schema_migrations WHERE version IN ('0001_application_core','0002_device_reconciliation')").fetchone()['ready']
+            migrated=conn.execute("SELECT count(*)=3 AS ready FROM hostelxpress_private.schema_migrations WHERE version IN ('0001_application_core','0002_device_reconciliation','0003_after_hours_pilot')").fetchone()['ready']
             if not migrated:
                 raise RuntimeError('Apply all application migrations before starting the API')
             if settings.is_demo:
@@ -112,7 +112,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
     app.add_middleware(TrustedHostMiddleware,allowed_hosts=[h.strip() for h in settings.trusted_hosts.split(',') if h.strip()])
     app.add_middleware(CORSMiddleware,allow_origins=[o.strip() for o in settings.cors_origins.split(',') if o.strip()],
                        allow_credentials=False,allow_methods=['GET','POST','PATCH'],
-                       allow_headers=['Authorization','Content-Type','Idempotency-Key'])
+                       allow_headers=['Authorization','Content-Type','Idempotency-Key','X-Pilot-Token'])
 
     @app.exception_handler(DatabaseError)
     async def database_error(request:Request,exc:DatabaseError):
@@ -218,6 +218,8 @@ def create_app(settings:Settings | None=None) -> FastAPI:
     # Device routes and MQTT bridge share the canonical wire contract.
     from .devices import install_routes
     install_routes(app)
+    # After Hours pilot: schedule, merchants, frozen quotes, capacity, merchant view.
+    pilot.install_routes(app)
     return app
 
 

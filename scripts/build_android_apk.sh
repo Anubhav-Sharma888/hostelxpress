@@ -119,7 +119,8 @@ if [[ $PREP_ONLY -eq 1 ]]; then
   exit 0
 fi
 TASK="assemble${VARIANT^}"
-(cd "$APP_ROOT/android" && ./gradlew "$TASK" --no-daemon -q </dev/null)
+# Resource-capped builds: two workers, no parallel projects, background priority.
+(cd "$APP_ROOT/android" && nice -n 10 ./gradlew "$TASK" --no-daemon --max-workers=2 --no-parallel -q </dev/null)
 APK="$APP_ROOT/android/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 [[ -f "$APK" ]] || { printf 'Build finished but no APK at %s\n' "$APK" >&2; exit 1; }
 printf '\nAPK: %s\nvariant: %s; local_qa: %s\n' "$APK" "$VARIANT" "$LOCAL_QA"

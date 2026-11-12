@@ -27,7 +27,7 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = 'ApiError'; }
 }
 
-export async function request<T>(path: string, token?: string, options: {method?: string; body?: unknown; idempotencyKey?: string} = {}): Promise<T> {
+export async function request<T>(path: string, token?: string, options: {method?: string; body?: unknown; idempotencyKey?: string; headers?: Record<string, string>} = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
@@ -38,6 +38,7 @@ export async function request<T>(path: string, token?: string, options: {method?
         ...(options.body !== undefined ? {'Content-Type': 'application/json'} : {}),
         ...(token ? {Authorization: 'Bearer ' + token} : {}),
         ...(options.idempotencyKey ? {'Idempotency-Key': options.idempotencyKey} : {}),
+        ...(options.headers || {}),
       },
       ...(options.body !== undefined ? {body: JSON.stringify(options.body)} : {}),
       signal: controller.signal,

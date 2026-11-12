@@ -3,43 +3,65 @@ import {View} from 'react-native';
 import Svg, {Circle, G, Line, Path, Rect, Text as SvgText} from 'react-native-svg';
 import {AUTH_MODE, type OrderStatus} from '../api';
 import {COLORS as C} from '../model';
-import {Icon, Label, T} from '../ui';
+import {Icon, T} from '../ui';
 
-const buildings = [{x: 74,y: 50,w: 92,h: 62,label:'A'}, {x: 240,y: 45,w: 70,h: 74,label:'B'}, {x: 536,y: 47,w: 112,h: 76,label:'C'}, {x: 78,y: 153,w: 67,h: 55,label:'D'}, {x: 290,y: 128,w: 91,h: 55,label:'E'}, {x: 508,y: 164,w: 90,h: 66,label:'F'}, {x: 573,y: 269,w: 68,h: 50,label:'G'}];
+const buildings = [
+  {x: 65, y: 65, w: 100, h: 65, label: 'A'},
+  {x: 238, y: 52, w: 100, h: 80, label: 'B'},
+  {x: 530, y: 50, w: 115, h: 95, label: 'C'},
+  {x: 67, y: 162, w: 100, h: 62, label: 'D'},
+  {x: 280, y: 155, w: 100, h: 65, label: 'E'},
+  {x: 505, y: 185, w: 105, h: 65, label: 'F'},
+  {x: 548, y: 277, w: 100, h: 54, label: 'G'},
+];
 export function CampusMap({status, hostel = 'C'}: {status?: OrderStatus; hostel?: string}) {
+  const destination = buildings.find(building => building.label === hostel) ?? buildings[2];
   const moving = status === 'Transit';
-  const arrived = status && ['Arrived','Paid','Completed'].includes(status);
-  const position = arrived ? {x: 465,y: 95} : moving ? {x: 354,y: 224} : {x: 198,y: 281};
-  return <View style={{backgroundColor: '#EDF1E7', borderRadius: 13, overflow: 'hidden', position: 'relative', minHeight: 260}}>
-    <View style={{position:'absolute',top:15,left:17,zIndex:1}}><Label style={{color:'#7E8D7B',fontSize:8}}>{AUTH_MODE==='demo'?'Illustrative campus · Demo':'Illustrative campus'}</Label></View>
+  const arrived = Boolean(status && ['Arrived', 'Paid', 'Completed'].includes(status));
+  const target = {x: destination.x + destination.w / 2, y: destination.y + destination.h / 2};
+  const position = arrived ? target : moving ? {x: 355, y: 250} : {x: 125, y: 285};
+  const route = `M75 285 H210 V250 H445 V${target.y} H${target.x}`;
+  return <View style={{backgroundColor: '#141B2B', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#293349'}}>
+    <View style={{paddingHorizontal: 16, paddingVertical: 13, backgroundColor: C.dark, flexDirection: 'row', gap: 9, alignItems: 'center'}}>
+      <Icon name="navigate-outline" size={19} color={C.lime} />
+      <T style={{fontFamily: 'ManropeBold', fontSize: 13, color: '#FFFFFF', flex: 1}}>Campus route</T>
+      <View style={{backgroundColor: '#FFFFFF12', paddingVertical: 4, paddingHorizontal: 9, borderRadius: 6}}>
+        <T style={{fontSize: 9, color: '#D8D4FF'}}>SCHEMATIC</T>
+      </View>
+    </View>
     <Svg width="100%" height={280} viewBox="0 0 700 350" accessibilityLabel="Illustrative campus route, not a real navigation map">
-      <Rect width={700} height={350} fill="#EDF1E7" />
-      <Path d="M-20 239 L175 239 L175 5 M15 132 L700 132 M422 -10 L422 370 M674 -10 L674 350 M0 326 L700 326" fill="none" stroke="#FBFCF7" strokeWidth={18} />
-      <Path d="M-20 239 L175 239 L175 5 M15 132 L700 132 M422 -10 L422 370 M674 -10 L674 350" fill="none" stroke="#DDE3D6" strokeWidth={1} />
-      <Rect x={241} y={264} width={128} height={45} rx={18} fill="#DEE6D5" />
-      <Rect x={474} y={265} width={60} height={42} rx={7} fill="#DFE6D8" />
-      <Path d="M490 270 L490 300 M481 285 L527 285" stroke="#CBD8C6" strokeWidth={1} />
-      {[{x:35,y:62},{x:207,y:175},{x:325,y:230},{x:492,y:41},{x:648,y:198},{x:398,y:306},{x:51,y:302},{x:454,y:161}].map((p,i) => <G key={i}><Circle cx={p.x} cy={p.y} r={9} fill="#CBDAC3"/><Circle cx={p.x-3} cy={p.y-3} r={6} fill="#D7E2CF"/></G>)}
-      {buildings.map((b) => <G key={b.label}>
-        <Rect x={b.x+4} y={b.y+5} width={b.w} height={b.h} rx={6} fill="#DCE2D4" />
-        <Rect x={b.x} y={b.y} width={b.w} height={b.h} rx={6} fill={b.label===hostel ? '#D7E4D3' : '#E3E8DC'} stroke={b.label===hostel ? '#A3B99B' : '#CED8C7'} />
-        <Line x1={b.x+12} y1={b.y+12} x2={b.x+b.w-12} y2={b.y+12} stroke="#CCD7C5" strokeWidth={2}/>
-        <SvgText x={b.x+b.w/2} y={b.y+b.h/2+7} textAnchor="middle" fontSize={13} fontWeight="600" fill="#8A9B83">{'HOSTEL '+b.label}</SvgText>
+      <Rect width={700} height={350} fill="#141B2B" />
+      {Array.from({length: 18}, (_, i) => <Line key={'v' + i} x1={i * 42} y1={0} x2={i * 42} y2={350} stroke="#253047" strokeWidth={.7} />)}
+      {Array.from({length: 9}, (_, i) => <Line key={'h' + i} x1={0} y1={i * 42} x2={700} y2={i * 42} stroke="#253047" strokeWidth={.7} />)}
+      <Rect x={278} y={275} width={125} height={55} rx={12} fill="#1A302A" stroke="#345E46" />
+      <SvgText x={340} y={305} textAnchor="middle" fontSize={10} fill="#A3C8AB">CAMPUS GREEN</SvgText>
+      {buildings.map(building => <G key={building.label}>
+        <Rect x={building.x} y={building.y} width={building.w} height={building.h} rx={8}
+          fill={building.label === hostel ? '#2B2644' : '#1D2639'}
+          stroke={building.label === hostel ? '#B9ABFF' : '#35425D'} />
+        <SvgText x={building.x + building.w / 2} y={building.y + building.h / 2 + 4} textAnchor="middle"
+          fontSize={11} fontWeight="600" fill={building.label === hostel ? '#BEF264' : '#B6C0D9'}>
+          {'HOSTEL ' + building.label}
+        </SvgText>
       </G>)}
-      <Path d="M74 281 L198 281 L198 224 L465 224 L465 95 L531 95" fill="none" stroke="#B8CBB0" strokeWidth={8} strokeLinejoin="round" />
-      <Path d="M74 281 L198 281 L198 224 L465 224 L465 95 L531 95" fill="none" stroke={C.forest} strokeWidth={3} strokeDasharray="5 6" strokeLinejoin="round" />
-      <Circle cx={74} cy={281} r={7} fill={C.orange} stroke="#FFFFFF" strokeWidth={3} />
-      <Rect x={23} y={248} width={93} height={22} rx={6} fill="#FFFFFF" />
-      <SvgText x={69} y={263} textAnchor="middle" fontSize={9} fill={C.ink}>GATE 2 · PICKUP</SvgText>
-      <Circle cx={position.x} cy={position.y} r={25} fill={C.forest} opacity={0.10}/>
-      <Circle cx={position.x} cy={position.y} r={18} fill={C.forest} stroke="#FFFFFF" strokeWidth={3}/>
-      <Rect x={position.x-9} y={position.y-7} width={18} height={12} rx={4} fill="#FFFFFF"/>
-      <Circle cx={position.x-4} cy={position.y-2} r={1.6} fill={C.forest}/><Circle cx={position.x+4} cy={position.y-2} r={1.6} fill={C.forest}/>
-      <Line x1={position.x-5} y1={position.y+6} x2={position.x+5} y2={position.y+6} stroke="#FFFFFF" strokeWidth={2}/>
+      <Path d={route} fill="none" stroke="#35445F" strokeWidth={17} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={route} fill="none" stroke={C.lime} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="10 5" />
+      <Circle cx={75} cy={285} r={8} fill={C.lime} stroke="#141B2B" strokeWidth={3} />
+      <Rect x={30} y={305} width={90} height={23} rx={6} fill="#293349" />
+      <SvgText x={75} y={321} textAnchor="middle" fontSize={10} fill="#FFFFFF">GATE 2</SvgText>
+      <Circle cx={position.x} cy={position.y} r={29} fill={C.lime} opacity={.12} />
+      <Rect x={position.x - 20} y={position.y - 20} width={40} height={40} rx={12} fill={C.lime} stroke="#172010" strokeWidth={3} />
+      <Rect x={position.x - 12} y={position.y - 8} width={24} height={16} rx={5} fill="#1E293B" />
+      <Circle cx={position.x - 5} cy={position.y - 1} r={2} fill="#BEF264" />
+      <Circle cx={position.x + 5} cy={position.y - 1} r={2} fill="#BEF264" />
+      <Line x1={position.x} y1={position.y - 8} x2={position.x} y2={position.y - 13} stroke="#1E293B" strokeWidth={2} />
+      <Circle cx={position.x} cy={position.y - 14} r={2} fill="#1E293B" />
     </Svg>
-    <View style={{position:'absolute',bottom:13,left:15,right:15,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
-      <View style={{backgroundColor:'#FFFFFFEE',borderRadius:7,paddingHorizontal:10,paddingVertical:6,flexDirection:'row',alignItems:'center',gap:6}}><Icon name="navigate-outline" size={12}/><T style={{fontSize:9,lineHeight:13}}>Gate 2 → Hostel {hostel}</T></View>
-      <T style={{fontSize:8,color:'#88917F'}}>Schematic only · No live coordinates</T>
+    <View style={{padding: 13, borderTopWidth: 1, borderTopColor: '#293349', gap: 5}}>
+      <T style={{fontFamily: 'DMSansMedium', fontSize: 11, color: '#E2E8F0'}}>Gate 2 → Hostel {hostel}</T>
+      <T style={{fontSize: 10, lineHeight: 16, color: '#AAB6D1'}}>
+        {AUTH_MODE === 'demo' ? 'Demo illustration' : 'Illustrative route'} · Position reflects delivery stage, not live coordinates.
+      </T>
     </View>
   </View>;
 }

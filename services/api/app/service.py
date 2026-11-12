@@ -147,7 +147,7 @@ def dispatch(conn, bot_id, *, virtual_deadline=False):
         if not state or state['is_empty'] is not True:
             return False
         if order['rider_due_at'] <= evaluation_time:
-            conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=now() WHERE id=%s",(order['id'],))
+            conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=GREATEST(now(),created_at) WHERE id=%s",(order['id'],))
             event(conn,order['id'],'Failed','Rider did not load before the five-minute deadline')
         else:
             # Preserve the rider's original deadline; another bot can reserve later.
@@ -207,7 +207,7 @@ def completed(conn, order, bot):
     fresh=bool(state and state['observed_at'] and (now()-state['observed_at']).total_seconds()<=15 and bot['last_seen_at'] and (now()-bot['last_seen_at']).total_seconds()<=15 and bot['status']!='FAULT_MODE')
     if not command or not fresh or state['inner_closed'] is not True or state['outer_closed'] is not True or state['is_empty'] is not True:
         raise HTTPException(409,'Collection needs executed unlock, a fresh empty/closed compartment snapshot, and a healthy device')
-    conn.execute("UPDATE public.orders SET status='Completed',completed_at=now(),compartment_released_at=now() WHERE id=%s",(order['id'],))
+    conn.execute("UPDATE public.orders SET status='Completed',completed_at=GREATEST(now(),created_at),compartment_released_at=GREATEST(now(),created_at) WHERE id=%s",(order['id'],))
     event(conn,order['id'],'Completed','Student collected parcel and the inner lid closed')
     remaining = conn.execute('SELECT count(*) AS count FROM public.orders WHERE bot_id=%s AND compartment_released_at IS NULL',(bot['id'],)).fetchone()['count']
     next_state = 'AT_HOSTEL' if remaining else ('IDLE_AT_GATE' if order['is_demo'] else 'RETURNING')
@@ -261,7 +261,7 @@ def tick(db):
                 if order['status']=='Pending' and order['rider_due_at'] <= now():
                     state = conn.execute('SELECT * FROM hostelxpress_private.compartment_state WHERE bot_id=%s AND compartment_id=%s',(bot['id'],order['compartment_id'])).fetchone()
                     releasable = bool(state and state['is_empty'] is True and safe_bot(conn,bot))
-                    conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=CASE WHEN %s THEN now() ELSE NULL END WHERE id=%s",(releasable,order['id']))
+                    conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=CASE WHEN %s THEN GREATEST(now(),created_at) ELSE NULL END WHERE id=%s",(releasable,order['id']))
                     event(conn,order['id'],'Failed','Rider no-show after five minutes')
                 if order['status']=='Paid' and not order['is_demo']:
                     enqueue_unlock(conn,order,bot)

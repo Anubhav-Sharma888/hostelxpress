@@ -11,6 +11,23 @@ python -m pip install -e integrations/device_connector
 
 The production transport uses TLS MQTT 5 for commands and periodic telemetry, plus signed HTTPS for durable critical events and command acknowledgements. A separate provisioned credential identifies each bot. Configure the names in `.env.example` using the backend/device provisioning process; do not commit real secrets. `from_env` reads exported process variables and does not automatically load a file.
 
+## Quickstart
+
+Export one value per provisioned bot, then attach your existing functions as shown below:
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `HOSTELXPRESS_BOT_ID` | yes | Backend-enrolled bot UUID (canonical lowercase) |
+| `HOSTELXPRESS_API_URL` | yes | Backend HTTPS origin, no path or credentials (HTTP only for explicit loopback development) |
+| `HOSTELXPRESS_DEVICE_SECRET` | yes | Per-device HMAC secret, at least 32 characters |
+| `HOSTELXPRESS_MQTT_HOST` / `_USERNAME` / `_PASSWORD` | yes | TLS broker identity restricted to this bot's topics |
+| `HOSTELXPRESS_MQTT_PORT` | no (default 8883) | TLS listener port |
+| `HOSTELXPRESS_MQTT_CA_FILE` | production: yes | CA bundle verifying the broker certificate and hostname |
+| `HOSTELXPRESS_LEDGER` | no (default under `~/.local/state/hostelxpress`) | Private persistent SQLite ledger — never `/tmp` |
+| `HOSTELXPRESS_ALLOW_LOOPBACK_HTTP` | no (`1` enables) | Explicit opt-in for local development transport only |
+
+Configuration is validated up front: a missing variable, malformed UUID, weak secret, credential-bearing origin, or a non-HTTPS API URL outside explicit loopback development fails immediately with the specific reason instead of misbehaving mid-run. Supply the three callbacks from your own code — `guard` (literal `True` only after checking the current assignment, fresh sensors, fault state and both lid interlocks), `on_unlock` (`True` on confirmed execution, `False` on failure, `None` for asynchronous plus `confirm_command_execution(command_id)` after real confirmation), and `clock_synchronized` (actual time-sync health). Every default refuses action until your team deliberately supplies real checks.
+
 With your team's real functions already defined, attaching is three lines:
 
 ```python
@@ -48,6 +65,17 @@ python -m unittest discover -s integrations/device_connector/tests -v
 ```
 
 The example `examples/wiring.py` has a refusing guard and an unimplemented actuator callback. Connecting it cannot authorize a physical unlock until the hardware team deliberately supplies real checks. No broker/device credentials are included. Unit tests prove local validation and retry behavior; they do not establish real HiveMQ ACLs, physical safety, live payment correctness, or campus navigation.
+
+## Acceptance harness
+
+`tests/integration/adapter_acceptance.py` runs the real connector against the real backend (worker and MQTT bridge enabled), a private loopback TLS Mosquitto, and a disposable PostgreSQL database. It demonstrates, end to end: exactly-once actuation across duplicate delivery and restart, the post-crash refusal to replay or silently confirm an uncertain command, backend rejection of the orphaned command for operator reconciliation, expired and retained command refusal, durable-event deduplication after a lost response, stale observations stored as `reconciliation_required`, no unlock for captured payment without arrival/telemetry, and completion only through a correlated inner-lid closure with an empty reading.
+
+```bash
+source .tools/env.sh
+HOSTELXPRESS_ADAPTER_ACCEPTANCE=1 python3 tests/integration/adapter_acceptance.py
+```
+
+Everything is local and synthetic. Passing this harness still does not establish real HiveMQ ACLs, live payment capture, or physical safety — those need the hardware pilot checks in `docs/hardware-handoff.md`.
 
 ## Delayed observations that require reconciliation
 

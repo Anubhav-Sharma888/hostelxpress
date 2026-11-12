@@ -47,6 +47,7 @@ def current_user(request: Request, credentials: HTTPAuthorizationCredentials | N
             require_local_demo(request)
             claims = jwt.decode(token, settings.demo_jwt_secret, algorithms=['HS256'],
                                 issuer='hostelxpress-local-demo', audience='hostelxpress-demo',
+                                leeway=5,
                                 options={'require':['sub','iss','aud','iat','exp']})
             if claims.get('mode') != 'demo':
                 raise jwt.InvalidTokenError('Wrong mode')

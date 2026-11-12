@@ -126,3 +126,22 @@ def test_nonexistent_jwt_subject_cannot_materialize_a_row(real):
     with real['db'].connection() as conn:
         assert conn.execute('SELECT count(*) AS n FROM public.users WHERE id=%s',(ghost,)).fetchone()['n']==0
         assert conn.execute('SELECT count(*) AS n FROM public.users WHERE id=%s',(real['user'],)).fetchone()['n']==1
+
+
+def test_auth_trigger_seeds_profile_names_from_metadata(db):
+    # SQL-boundary contract of hostelxpress_auth_user_created, reproduced
+    # against the disposable schema: the trigger stores the canonical 'name'
+    # metadata key (the key the app sends so the name survives email
+    # confirmation on any deployed trigger version) and seeds the DDL default
+    # when it is absent. Legacy full_name-only metadata is deliberately not
+    # consumed by SQL (recorded 29 October decision): onboarding reads it only
+    # for missing fields and Profile -> Edit remains the recovery path.
+    named,legacy,unnamed=uuid4(),uuid4(),uuid4()
+    with db.connection() as conn:
+        conn.execute('INSERT INTO auth.users(id,raw_user_meta_data) VALUES(%s,%s)',(named,Jsonb({'name':'Trigger Name'})))
+        conn.execute('INSERT INTO auth.users(id,raw_user_meta_data) VALUES(%s,%s)',(legacy,Jsonb({'full_name':'Legacy Full Name'})))
+        conn.execute('INSERT INTO auth.users(id,raw_user_meta_data) VALUES(%s,%s)',(unnamed,Jsonb({})))
+    with db.connection() as conn:
+        assert conn.execute('SELECT name FROM public.users WHERE id=%s',(named,)).fetchone()['name']=='Trigger Name'
+        assert conn.execute('SELECT name FROM public.users WHERE id=%s',(legacy,)).fetchone()['name']=='Student'
+        assert conn.execute('SELECT name FROM public.users WHERE id=%s',(unnamed,)).fetchone()['name']=='Student'
