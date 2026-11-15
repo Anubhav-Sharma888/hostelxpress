@@ -2,12 +2,14 @@ import React, {createContext, useCallback, useContext, useEffect, useRef, useSta
 import {AppState} from 'react-native';
 import {ApiError, AUTH_MODE, DemoAction, Order, request, Session, supabase, User} from './api';
 import {fetchProfileWithOnboarding, signUpWithProfile} from './signup';
+import {makeLocalBooking, QA_ORDERS, QA_SESSION, QA_USER} from './qa';
 
 type AppStateValue = {
   session: Session | null; user: User | null; orders: Order[]; loading: boolean; error: string | null; updatedAt: number | null;
   signIn: (email: string, password: string) => Promise<void>; signUp: (email: string, password: string, name: string, hostel: string) => Promise<void>;
   updateProfile: (patch: {name?: string; hostel_block: string}) => Promise<User>;
   signOut: () => void;
+  enterQaPreview: () => void;
   refresh: () => Promise<void>; createOrder: (label: string, hostel: string, key: string) => Promise<Order>;
   advance: (id: string, action: DemoAction) => Promise<Order>;
 };
@@ -36,8 +38,15 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     generation.current += 1; refreshing.current = false;
     setSession(null); setUser(null); setOrders([]); setError(null); setUpdatedAt(null); setLoading(false);
   }, []);
+  // QA preview (build-time flag): an in-memory session with sample data.
+  // refresh() is a no-op in this mode, so nothing ever touches the network.
+  const enterQaPreview = useCallback(() => {
+    generation.current += 1; refreshing.current = false;
+    setSession({...QA_SESSION});
+    setUser(QA_USER); setOrders(QA_ORDERS); setError(null); setUpdatedAt(null); setLoading(false);
+  }, []);
   const refresh = useCallback(async () => {
-    if (!session || refreshing.current) return;
+    if (!session || session.mode === 'qa-preview' || refreshing.current) return;
     const current = generation.current;
     refreshing.current = true;
     try {
@@ -107,6 +116,12 @@ export function AppProvider({children}: {children: React.ReactNode}) {
   const upsert = (order: Order) => setOrders(current => [order, ...current.filter(item => item.id !== order.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)));
   const createOrder = async (label: string, hostel: string, key: string) => {
     if (!session) throw new Error('Please sign in first.');
+    // QA preview: the sample booking is created in memory only - no API call.
+    if (session.mode === 'qa-preview') {
+      const order = makeLocalBooking(label, hostel, ['qa', 'booking', key].join('-'));
+      upsert(order);
+      return order;
+    }
     const current = generation.current;
     const order = await request<Order>('/v1/orders', session.access_token, {
       method: 'POST', body: {parcel_label: label.trim(), destination_hostel_block: hostel}, idempotencyKey: key,
@@ -121,6 +136,6 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your deliveries.');
     upsert(order); void refresh(); return order;
   };
-  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signUp,updateProfile,signOut,refresh,createOrder,advance}}>{children}</Context.Provider>;
+  return <Context.Provider value={{session,user,orders,loading,error,updatedAt,signIn,signUp,updateProfile,signOut,enterQaPreview,refresh,createOrder,advance}}>{children}</Context.Provider>;
 }
 export function useApp() {const value = useContext(Context); if (!value) throw new Error('AppProvider is required.'); return value;}

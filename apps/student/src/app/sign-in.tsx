@@ -3,6 +3,7 @@ import {KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View} 
 import {router} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AUTH_MODE} from '../api';
+import {QA_PREVIEW} from '../qa';
 import {HostelPicker} from '../components/HostelPicker';
 import {Wordmark} from '../components/AppShell';
 import {COLORS as C} from '../model';
@@ -140,7 +141,7 @@ function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
 }
 
 function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: string) => void}) {
-  const {signIn, signUp} = useApp();
+  const {signIn, signUp, enterQaPreview} = useApp();
   const [create, setCreate] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -243,6 +244,31 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
           {create ? 'Already registered? Sign in' : 'New student? Register hostel room'}
         </T>
       </Pressable>
+      {QA_PREVIEW && (
+        <View style={{marginTop: 10, padding: 14, borderRadius: 12, backgroundColor: C.dark, borderWidth: 1, borderColor: C.dark, gap: 8}}>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            <Icon name="construct-outline" size={17} color={C.lime} />
+            <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: C.lime}}>QA PREVIEW</T>
+            <T style={{fontSize: 10, color: '#CBD5E1'}}>offline · no backend calls</T>
+          </View>
+          <T style={{fontSize: 11, lineHeight: 16, color: '#CBD5E1'}}>
+            Skips authentication entirely. The app runs on sample data from memory; nothing reaches Supabase, the API, payments, or rovers.
+          </T>
+          <Button
+            variant="secondary"
+            icon="play-skip-forward-outline"
+            onPress={() => {
+              enterQaPreview();
+              router.replace('/');
+            }}
+            disabled={busy}
+            testID="qa-skip-sign-in"
+            accessibilityLabel="Skip sign-in for testing"
+          >
+            Skip sign-in for testing
+          </Button>
+        </View>
+      )}
     </View>
   );
 }

@@ -21,6 +21,20 @@ This repository owns the student app, backend, authentication, payments, databas
 - Browser test modes are exclusive. The offline selection verifier works whether the parent environment selects demo or real mode, and CI checks both without contacting Supabase.
 - Build-script validation and dependency/tool prerequisites are tracked, alongside SDK-license handoff and safe isolated-preparation instructions.
 
+## 15 November 2026, 15:30 — standalone QA APK COMPLETED
+
+- **APK built and verified from HEAD `60059ca`** (no app edits since): `apps/student/android/app/build/outputs/apk/release/app-release.apk`, **99,217,254 bytes**, SHA-256 `b28d45c978d52f353a506b574f40b9869352c686d9611ced7687099af14fe7f3`, debug-signed (`apksigner verify` RC=0, cert digest `fac61745...`), **bundled JavaScript `assets/index.android.bundle` present** (standalone launch — no Metro), packaged network policy = HTTPS-only base with the localhost QA exception. Install: copy the APK → allow unknown sources → sign in → book/order → pay (simulated) → merchant queue (`demo-staff-tuck`). Full checklist: `docs/device-qa-checklist.md`.
+- Build ran inside the memory-capped scope; the C++ phase was memory-throttled ~2.5 h until Codex's live scope repair (cap 2.3→3.5 GB, throttle eliminated), then lint-vital (~90 min) and packaging completed. Peak scoped memory ~2.8 GB. Failed-attempt logs preserved under `.tools/`.
+- **Phone QA is now the single remaining gate for Phase 3 acceptance.**
+- Publication still blocked by the recorded Mimosa L3 findings; nothing pushed since `60059ca`.
+
+## 15 November 2026 — pilot verified per-leg under the 2.3 GB cap
+
+- HEAD `60059ca` (pushed) contains the After Hours pilot, adapter harness and Stitch work; working tree clean. The Windows mirror is in sync for all checked pilot files (mirror-only: three 15 November handoff documents + the newer Stitch export with 18 screens, including merchant tablet, pickup success, register and curfew designs not yet applied).
+- Split-leg browser verification PASSED in the reduced scope (`MemoryMax=2300000000`, `MemorySwapMax=0`, `CPUQuota=200%`, `taskset -c 0,1` with verified child affinity): **@student on mobile** — Get quote (never places an order), cart-change invalidation ("Your cart changed." + Confirm removed), refreshed ₹110 total, explicit Confirm, Order placed, simulated payment; **@merchant on tablet** — staff sign-in, token entry, Accept/Mark-ready/Request-rover/Confirm-loaded, cross-merchant isolation. Gate 2 journeys 6/6. Fixes en route: pilot-spec selection needs `HX_E2E_PILOT=1` (the config gained a pilot mode that ignores the pilot spec by default — the earlier `HX_E2E_REAL=0` runner invocation silently matched nothing), and the merchant test now signs in and navigates client-side (a signed-out direct load of `/merchant` lands on the marketing page). Expired quotes remain API-verified only (UI expiry would need a 10-minute wait).
+- APK rebuild still pending under the tighter 2.3 GB cap — resume via `.tools/run-apk-resume.sh` (fixed: absolute paths, discovered build-tools, fail-closed) with `CMAKE_BUILD_PARALLEL_LEVEL=2`; the ninja cache retains ~1,000 compiled C++ objects. Phone QA pending after that.
+- Publication still blocked by the recorded Mimosa L3 findings (remediation or your own review pending); nothing pushed since `60059ca`.
+
 ## 6 November 2026 — Stitch tokens and After Hours pilot backend
 
 - Stitch design tokens applied to the shared theme (indigo ink, lavender surfaces, lime primary action with dark on-lime text, amber/rose semantics); the three payment-to-pickup states now read exactly as specified. App suite 30/30; typecheck and lint green.
@@ -84,5 +98,11 @@ Typecheck, lint, 30 app tests and both mobile Gate 2 demo journeys passed. The A
 
 - Executed the adapter acceptance harness (\	ests/integration/adapter_acceptance.py\) under supervisor-mandated memory scope (\systemd-run --user --scope\, \MemoryMax=3.5GB\, \
 ice -n 10\) on disposable local infrastructure (private loopback TLS Mosquitto port 18884, disposable PostgreSQL 17 port 55436, and FastAPI port 8014).
-- Verified all 9 core adapter guarantees deterministically (\harness_rc=0\): uncertain asynchronous unlock (intent durable before callback), crash/restart idempotency (replay blocked, redelivery re-acked from ledger), silent late confirmation refusal (\ValueError\), backend status of uncertain command marked \ejected\, expired-TTL & retained commands refused without actuation, payment without arrival/telemetry produces 0 unlocks, duplicate durable event retry stores exactly 1 row with \duplicate: true\, stale observation durably recorded as \econciliation_required\, and clean synchronous completion with empty compartment reading.
+- Verified all 9 core adapter guarantees deterministically (\harness_rc=0\): uncertain asynchronous unlock (intent durable before callback), crash/restart idempotency (replay blocked, redelivery re-acked from ledger), silent late confirmation refusal (\ValueError\), backend status of uncertain command marked \
+ejected\, expired-TTL & retained commands refused without actuation, payment without arrival/telemetry produces 0 unlocks, duplicate durable event retry stores exactly 1 row with \duplicate: true\, stale observation durably recorded as \
+econciliation_required\, and clean synchronous completion with empty compartment reading.
 - Connector unit suite (17 passed in 1.47s) and Phase 0 contract suite (17 passed in 0.40s) verified clean. Running student demo stack on ports 8000 and 8081 preserved undisturbed. Peak memory was 71.7 MB with zero OOM events. Full review record and remaining commissioning requirements compiled in \docs/phase4-review.md\.
+
+
+## 15 November — Android build stall repaired
+Restored the existing build's scope from2.3GB/max2.2GB/high to authorized3.5GB/max2.8GB/high with two-CPU affinity. Severe memory throttling fell to nearzero and the same build produced the99,217,254-byte APK at15:18IST. Signature and bundledJavaScript verified. See docs/reviews/2026-11-15-build-stall-recovery.md. Physical-phone acceptance pending.

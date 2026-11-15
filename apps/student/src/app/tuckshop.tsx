@@ -98,6 +98,10 @@ export default function TuckShop() {
   }, [merchant, quote, quoteValid, token]);
 
   if (!session) return <Card style={{padding: 22}}><T>Sign in to order from the After Hours pilot.</T></Card>;
+  if (session.mode === 'qa-preview') return <Card style={{padding: 22, gap: 10}}>
+    <T style={{fontFamily: 'ManropeBold', fontSize: 16}}>QA Preview · ordering unavailable</T>
+    <T style={{fontSize: 13, color: C.muted}}>Tuck Shop quotes and departures come from the backend, which the offline QA preview does not reach. Exit preview and sign in to order for real.</T>
+  </Card>;
   if (loading) return <Loading label="Opening the shop…" />;
   if (!merchant) return <ErrorNotice message="No merchant is configured for this pilot yet." retry={() => void load()} />;
   const departure = merchant.departures[0];

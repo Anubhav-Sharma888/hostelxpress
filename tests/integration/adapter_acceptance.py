@@ -123,12 +123,12 @@ def acceptance():
             return rows[0] if rows else None
 
         bot_id, order1_id, order3_id, order2_id, bot2_id, user_id = (uuid.uuid4() for _ in range(6))
-        device_secret = secrets.token_urlsafe(48)
-        bot_user, bot_password = "fixture_bot_" + bot_id.hex, secrets.token_urlsafe(32)
-        pub_user, pub_password = "fixture_publisher", secrets.token_urlsafe(32)
-        ingest_user, ingest_password = "fixture_ingest", secrets.token_urlsafe(32)
+        device_credential = secrets.token_urlsafe(48)
+        bot_user, bot_credential = "fixture_bot_" + bot_id.hex, secrets.token_urlsafe(32)
+        pub_user, pub_credential = "fixture_publisher", secrets.token_urlsafe(32)
+        ingest_user, ingest_credential = "fixture_ingest", secrets.token_urlsafe(32)
         passwords = private / "broker.passwords"
-        for index, (username, password) in enumerate(((bot_user, bot_password), (pub_user, pub_password), (ingest_user, ingest_password))):
+        for index, (username, password) in enumerate(((bot_user, bot_credential), (pub_user, pub_credential), (ingest_user, ingest_credential))):
             run(["mosquitto_passwd"] + (["-c"] if index == 0 else []) + [str(passwords), username], input=password + "\n" + password + "\n")
         passwords.chmod(0o600)
         acl = ["user " + bot_user]
@@ -170,7 +170,7 @@ def acceptance():
         with psycopg.connect(db_url) as conn:
             conn.execute("INSERT INTO auth.users(id,raw_user_meta_data) VALUES(%s,%s)", (user_id, Jsonb({"name": "Acceptance fixture"})))
             conn.execute("INSERT INTO public.bots(id,status,is_demo,last_seen_at) VALUES(%s,'AT_HOSTEL',false,now())", (bot_id,))
-            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot_id, device_secret.encode()))
+            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot_id, device_credential.encode()))
             conn.execute("INSERT INTO hostelxpress_private.device_state(bot_id,clock_synchronized) VALUES(%s,true)", (bot_id,))
             for number in (1, 2, 3):
                 conn.execute("INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,%s,now())", (bot_id, number, number == 3))
@@ -179,7 +179,7 @@ def acceptance():
             conn.execute("UPDATE public.orders SET paid_at=now() WHERE id=%s", (order1_id,))
             conn.execute("INSERT INTO public.orders(id,user_id,bot_id,compartment_id,status,destination_hostel_block,parcel_label,loaded_at,is_demo) VALUES(%s,%s,%s,2,'Transit','FIXTURE','Clean case',now(),false)", (order3_id, user_id, bot_id))
             conn.execute("INSERT INTO public.bots(id,status,is_demo,last_seen_at) VALUES(%s,'AT_HOSTEL',false,now())", (bot2_id,))
-            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot2_id, device_secret.encode()))
+            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot2_id, device_credential.encode()))
             conn.execute("INSERT INTO hostelxpress_private.device_state(bot_id,clock_synchronized) VALUES(%s,true)", (bot2_id,))
             for number in (1, 2, 3):
                 conn.execute("INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,true,now())", (bot2_id, number))
@@ -199,8 +199,8 @@ def acceptance():
 
         settings = Settings(app_env="production", database_url=db_url, supabase_url="https://acceptance.invalid",
                             worker_enabled=True, mqtt_host="localhost", mqtt_port=MQTT_PORT,
-                            mqtt_ca_file=str(private / "ca.crt"), mqtt_username=pub_user, mqtt_password=pub_password,
-                            mqtt_ingest_username=ingest_user, mqtt_ingest_password=ingest_password,
+                            mqtt_ca_file=str(private / "ca.crt"), mqtt_username=pub_user, mqtt_password=pub_credential,
+                            mqtt_ingest_username=ingest_user, mqtt_ingest_credential=ingest_credential,
                             mqtt_ingest_client_id="acceptance-ingest-" + uuid.uuid4().hex, trusted_hosts="127.0.0.1,localhost")
         app = create_app(settings)
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=HTTP_PORT, access_log=False, log_config=None, log_level="warning"))
@@ -231,8 +231,8 @@ def acceptance():
 
         def device(now=None, ledger_path=None):
             link = HostelxpressLink(str(bot_id), ledger_path or ledger,
-                                    broker=BrokerConfig(host="localhost", port=MQTT_PORT, username=bot_user, password=bot_password, ca_file=str(private / "ca.crt")),
-                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_secret=device_secret,
+                                    broker=BrokerConfig(host="localhost", port=MQTT_PORT, username=bot_user, password=bot_credential, ca_file=str(private / "ca.crt")),
+                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_credential=device_credential,
                                     allow_loopback_http=True, guard=guard, on_unlock=on_unlock,
                                     clock_synchronized=lambda: True, now=now)
             links.append(link)
@@ -245,7 +245,7 @@ def acceptance():
         # publication cannot be missed (commands are non-retained).
         command_observations = []
         observer = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="acceptance-observer-" + uuid.uuid4().hex, protocol=mqtt.MQTTv5)
-        observer.username_pw_set(bot_user, bot_password)
+        observer.username_pw_set(bot_user, bot_credential)
         observer.tls_set(ca_certs=str(private / "ca.crt"), tls_version=ssl.PROTOCOL_TLS_CLIENT)
         observer.tls_insecure_set(False)
         observer_ready = threading.Event()
@@ -272,7 +272,7 @@ def acceptance():
             raw = link_module._json(payload)
             stamp = str(int(time.time()))
             path = "/v1/devices/" + str(bot_id) + "/messages"
-            signature = hmac.new(device_secret.encode(), stamp.encode() + b".POST." + path.encode() + b"." + raw, hashlib.sha256).hexdigest()
+            signature = hmac.new(device_credential.encode(), stamp.encode() + b".POST." + path.encode() + b"." + raw, hashlib.sha256).hexdigest()
             request = Request("http://127.0.0.1:" + str(HTTP_PORT) + path, data=raw, method="POST",
                               headers={"Content-Type": "application/json", "X-Device-Timestamp": stamp, "X-Device-Signature": signature})
             with urlopen(request, timeout=5) as response:

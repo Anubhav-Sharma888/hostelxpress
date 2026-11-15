@@ -44,6 +44,10 @@ export default function AfterHours() {
   }, [token]);
 
   if (!session) return <Card><T>Sign in to browse the After Hours pilot.</T></Card>;
+  if (session.mode === 'qa-preview') return <Card style={{padding: 22, gap: 10}}>
+    <T style={{fontFamily: 'ManropeBold', fontSize: 16}}>QA Preview · After Hours unavailable</T>
+    <T style={{fontSize: 13, color: C.muted}}>Merchant windows and departures come from the backend, which the offline QA preview does not reach. Exit preview and sign in to browse live After Hours data.</T>
+  </Card>;
   if (loading && !schedule) return <Loading label="Checking tonight's windows…" />;
   return <View style={{gap: 20}}>
     <PageTitle eyebrow="AFTER HOURS · CAMPUS DELIVERY" title="Midnight cravings."

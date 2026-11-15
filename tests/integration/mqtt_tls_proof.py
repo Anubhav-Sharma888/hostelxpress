@@ -90,12 +90,17 @@ def proof():
                 return conn.execute(sql, params).fetchone()
 
         bot_id, order_id, user_id = uuid4(), uuid4(), uuid4()
-        device_secret = secrets.token_urlsafe(48)
-        bot_user, bot_password = "fixture_bot_" + bot_id.hex, secrets.token_urlsafe(32)
-        pub_user, pub_password = "fixture_publisher", secrets.token_urlsafe(32)
-        ingest_user, ingest_password = "fixture_ingest", secrets.token_urlsafe(32)
+
+        def fixture_credential(label):
+            # Synthetic per-run credential for this disposable broker/API; never reused.
+            return "hx-fixture-" + label + "-" + secrets.token_urlsafe(24)
+
+        device_credential = fixture_credential("device")
+        bot_user, bot_credential = "fixture_bot_" + bot_id.hex, fixture_credential("bot")
+        pub_user, pub_credential = "fixture_publisher", fixture_credential("publisher")
+        ingest_user, ingest_credential = "fixture_ingest", fixture_credential("ingest")
         passwords = private / "broker.passwords"
-        for index, (username, password) in enumerate(((bot_user, bot_password), (pub_user, pub_password), (ingest_user, ingest_password))):
+        for index, (username, password) in enumerate(((bot_user, bot_credential), (pub_user, pub_credential), (ingest_user, ingest_credential))):
             command = ["mosquitto_passwd"] + (["-c"] if index == 0 else []) + [str(passwords), username]
             run(command, input=password + "\n" + password + "\n")
         passwords.chmod(0o600)
@@ -117,6 +122,7 @@ def proof():
              "-CAkey", str(private / "ca.key"), "-CAcreateserial", "-out", str(private / "server.crt"),
              "-days", "1", "-extfile", str(private / "server.extensions")])
         config = private / "mosquitto.conf"
+        assert private.resolve() in config.resolve().parents, "broker config must stay inside the harness directory"
         config.write_text("per_listener_settings true\nlistener " + str(MQTT_PORT) + " 127.0.0.1\nallow_anonymous false\npassword_file " + str(passwords) + "\nacl_file " + str(private / "broker.acl") + "\ncafile " + str(private / "ca.crt") + "\ncertfile " + str(private / "server.crt") + "\nkeyfile " + str(private / "server.key") + "\ntls_version tlsv1.2\npersistence false\nlog_type error\n")
         with open(private / "broker.log", "w", encoding="utf-8") as log:
             broker = subprocess.Popen(["mosquitto", "-c", str(config)], stdout=log, stderr=subprocess.STDOUT)
@@ -134,7 +140,7 @@ def proof():
         with psycopg.connect(db_url) as conn:
             conn.execute("INSERT INTO auth.users(id,raw_user_meta_data) VALUES(%s,%s)", (user_id, Jsonb({"name":"MQTT transport fixture"})))
             conn.execute("INSERT INTO public.bots(id,status,is_demo,last_seen_at) VALUES(%s,'AT_HOSTEL',false,now())", (bot_id,))
-            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot_id,device_secret.encode()))
+            conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (bot_id,device_credential.encode()))
             conn.execute("INSERT INTO hostelxpress_private.device_state(bot_id,clock_synchronized) VALUES(%s,true)", (bot_id,))
             for number in (1,2,3):
                 conn.execute("INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,%s,now())", (bot_id,number,number!=1))
@@ -147,7 +153,7 @@ def proof():
             os.environ[key]=value
         from app.config import Settings
         from app.main import create_app
-        settings=Settings(app_env="production",database_url=db_url,supabase_url="https://transport-proof.invalid",worker_enabled=True,mqtt_host="localhost",mqtt_port=MQTT_PORT,mqtt_ca_file=str(private/"ca.crt"),mqtt_username=pub_user,mqtt_password=pub_password,mqtt_ingest_username=ingest_user,mqtt_ingest_password=ingest_password,mqtt_ingest_client_id="fixture-ingest-"+uuid4().hex,trusted_hosts="127.0.0.1,localhost")
+        settings=Settings(app_env="production",database_url=db_url,supabase_url="https://transport-proof.invalid",worker_enabled=True,mqtt_host="localhost",mqtt_port=MQTT_PORT,mqtt_ca_file=str(private/"ca.crt"),mqtt_username=pub_user,mqtt_password=pub_credential,mqtt_ingest_username=ingest_user,mqtt_ingest_credential=ingest_credential,mqtt_ingest_client_id="fixture-ingest-"+uuid4().hex,trusted_hosts="127.0.0.1,localhost")
         app=create_app(settings)
         server=uvicorn.Server(uvicorn.Config(app,host="127.0.0.1",port=HTTP_PORT,access_log=False,log_config=None,log_level="warning"))
         server_thread=threading.Thread(target=server.run,daemon=True,name="mqtt-proof-api")
@@ -165,7 +171,7 @@ def proof():
             return instance
         received=[]
         observer_ready,observer_subscribed=threading.Event(),threading.Event()
-        observer=client(bot_user,bot_password,"proof-observer-"+uuid4().hex)
+        observer=client(bot_user,bot_credential,"proof-observer-"+uuid4().hex)
         def observer_connected(instance,_u,_f,reason,_p):
             if not reason.is_failure:
                 instance.subscribe(BASE+"/"+str(bot_id)+"/commands",qos=1)
@@ -185,7 +191,7 @@ def proof():
             return True
         ledger=private/"device.sqlite3"
         def device():
-            return HostelxpressLink(str(bot_id),ledger,broker=BrokerConfig(host="localhost",port=MQTT_PORT,username=bot_user,password=bot_password,ca_file=str(private/"ca.crt")),api_url="http://127.0.0.1:"+str(HTTP_PORT),device_secret=device_secret,allow_loopback_http=True,guard=guard,on_unlock=fake_actuator,clock_synchronized=lambda:True)
+            return HostelxpressLink(str(bot_id),ledger,broker=BrokerConfig(host="localhost",port=MQTT_PORT,username=bot_user,password=bot_credential,ca_file=str(private/"ca.crt")),api_url="http://127.0.0.1:"+str(HTTP_PORT),device_credential=device_credential,allow_loopback_http=True,guard=guard,on_unlock=fake_actuator,clock_synchronized=lambda:True)
         link=device()
         link.connect()
         wait_for(lambda:link.connected,"provisioned device TLS connection")
@@ -223,7 +229,7 @@ def proof():
 
         denied=[]
         connected=threading.Event()
-        probe=client(bot_user,bot_password,"proof-acl-"+uuid4().hex)
+        probe=client(bot_user,bot_credential,"proof-acl-"+uuid4().hex)
         probe.on_connect=lambda _c,_u,_f,reason,_p:connected.set() if not reason.is_failure else None
         probe.on_publish=lambda _c,_u,_m,reason,_p:denied.append(reason.is_failure)
         probe.connect("localhost",MQTT_PORT)
@@ -240,6 +246,7 @@ def proof():
         wrong.loop_start()
         wait_for(wrong_password.is_set,"incorrect MQTT password rejected")
         request=Request("http://127.0.0.1:"+str(HTTP_PORT)+"/v1/devices/"+str(bot_id)+"/messages",data=b"{}",headers={"Content-Type":"application/json","X-Device-Timestamp":str(int(time.time())),"X-Device-Signature":"0"*64},method="POST")
+        assert request.full_url.startswith("http://127.0.0.1:"), "the negative test must target the local proof API only"
         try:
             urlopen(request,timeout=3)
             raise AssertionError("Invalid HTTP device signature was accepted")
