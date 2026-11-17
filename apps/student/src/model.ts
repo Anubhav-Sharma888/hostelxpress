@@ -1,13 +1,12 @@
 import type {DemoAction, Order, OrderStatus} from './api';
 
-// Google Stitch design tokens (design-system handoff, 5 November 2026):
-// indigo structural canvas, lime primary action (dark text on lime), lavender
-// secondary surfaces, amber for cutoffs/stale, rose for rejections.
+// Google Stitch export, 17 November 2026: orange actions, navy text, lavender surfaces.
 export const COLORS = {
-  ink: '#141B2B', muted: '#514F68', forest: '#293040', dark: '#293040', mint: '#E9EDFF',
-  primary: '#416900', lime: '#84CC16', onLime: '#102000', lavender: '#E3DFFF',
-  orange: '#FFA270', peach: '#FFDBCA', canvas: '#F9F9FF', white: '#FFFFFF',
-  line: '#E4E6F3', danger: '#BA1A1A', pale: '#F1F3FF',
+  ink:'#0B1C30', muted:'#565E74', forest:'#0B1C30', dark:'#0B1C30',
+  mint:'#D3EDE9', primary:'#A63B00', lime:'#FF5E00', onLime:'#FFFFFF',
+  lavender:'#DAE2FD', orange:'#FF5E00', peach:'#FFDBCE',
+  canvas:'#F8F9FF', white:'#FFFFFF', line:'#DCE9FF', danger:'#BA1A1A',
+  pale:'#EFF4FF', teal:'#006A61',
 };
 export const STATUS_COPY: Record<OrderStatus, {label: string; title: string; description: string}> = {
   Pending: {label: 'Awaiting rider', title: 'A little closer to your door.', description: 'Your compartment is reserved. Waiting for the rider to load your parcel at Gate 2.'},

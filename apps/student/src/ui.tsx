@@ -24,11 +24,11 @@ export function Button({children, onPress, icon, variant = 'primary', loading, d
   const light = variant === 'primary' || variant === 'orange';
   const color = light ? C.onLime : variant === 'dark' ? C.white : C.ink;
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || children} accessibilityState={{disabled: disabled || loading}} disabled={disabled || loading} testID={testID} onPress={onPress}
-    style={({pressed}) => [{minHeight: 48, paddingHorizontal: small ? 14 : 20, paddingVertical: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
-      backgroundColor: variant === 'primary' ? C.lime : variant === 'orange' ? C.lime : variant === 'dark' ? C.ink : variant === 'secondary' ? C.pale : 'transparent',
+    style={({pressed}) => [{minHeight: 48, paddingHorizontal: small ? 14 : 20, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
+      backgroundColor: variant === 'primary' ? C.lime : variant === 'orange' ? C.orange : variant === 'dark' ? C.ink : variant === 'secondary' ? C.pale : 'transparent',
       borderWidth: variant === 'ghost' ? 1 : 0, borderColor: C.line, opacity: disabled || loading ? 0.55 : pressed ? 0.8 : 1}]}>
       {loading ? <ActivityIndicator size="small" color={color} /> : icon ? <Icon name={icon} color={color} size={17} /> : null}
-      <T style={{fontFamily: prominent ? 'ManropeBold' : 'DMSansBold', color, fontSize: prominent ? 20 : small ? 12 : 14, lineHeight: prominent ? 28 : 22, flexShrink: 1, minWidth: 0, textAlign: 'center'}}>{children}</T>
+      <T style={{fontFamily: prominent ? 'ManropeBold' : 'DMSansBold', color, fontSize: prominent ? 18 : small ? 12 : 14, lineHeight: prominent ? 26 : 22, flexShrink: 1, minWidth: 0, textAlign: 'center'}}>{children}</T>
     </Pressable>;
 }
 export function Pill({children, tone = 'green', icon}: {children: string; tone?: 'green' | 'orange' | 'neutral' | 'red'; icon?: IconName}) {
@@ -42,7 +42,7 @@ export function StatusPill({status}: {status: OrderStatus}) {
   return <Pill tone={status === 'Failed' ? 'red' : status === 'Arrived' || status === 'Paid' ? 'orange' : 'green'}>{STATUS_COPY[status].label}</Pill>;
 }
 export function Card({children, style}: {children: React.ReactNode; style?: StyleProp<ViewStyle>}) {
-  return <View style={[{backgroundColor: C.white, borderRadius: 14, borderWidth: 1, borderColor: '#F0F0F8', padding: 23}, style]}>{children}</View>;
+  return <View style={[{backgroundColor: C.white, borderRadius: 14, borderWidth: 1, borderColor: '#FFFFFF', padding: 23}, style]}>{children}</View>;
 }
 export function ErrorNotice({message, retry}: {message: string; retry?: () => void}) {
   return <View accessibilityRole="alert" style={{backgroundColor: '#FDF0E9', borderColor: '#EDC9B9', borderWidth: 1, padding: 14, borderRadius: 10, gap: 8}}>

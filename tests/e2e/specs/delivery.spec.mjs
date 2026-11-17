@@ -22,8 +22,10 @@ test('student can book, track, pay in demo, and confirm collection', async ({pag
   await capture(page, '../../docs/preview/' + testInfo.project.name + '-home.png');
 
   await page.getByTestId('booking-open').first().click();
+  await page.getByTestId('room-input').fill('Room 304, Wing A');
   await page.getByTestId('booking-label').fill('Lunch from Gate 2');
   await page.getByTestId('booking-submit').click();
+  await expect(page.getByText('Rover Live Tracking', {exact: true})).toBeInViewport();
   await expect(page.getByTestId('demo-next-action')).toBeVisible();
   await expect(page.getByTestId('demo-next-action')).toHaveAccessibleName('Simulate rider loading');
   await page.getByTestId('demo-next-action').click();
@@ -42,18 +44,18 @@ test('student can book, track, pay in demo, and confirm collection', async ({pag
   await page.getByTestId('demo-next-action').click();
   await expect(page.getByTestId('demo-next-action')).toHaveAccessibleName('Simulate collection & lid closed');
   await page.getByTestId('demo-next-action').click();
-  await expect(page.getByText('Delivered. Day made.', {exact: true})).toBeVisible();
+  await expect(page.getByText('Delivery Complete · Compartment Latched', {exact: true})).toBeVisible();
   await expect(page.getByTestId('demo-next-action')).toHaveCount(0);
-  await page.getByRole('link', {name: 'My deliveries', exact: true}).click();
+  await page.getByRole('link', {name: 'Help & History', exact: true}).click();
   await page.getByRole('tab', {name: 'Completed deliveries'}).click();
-  await expect(page.getByText('Lunch from Gate 2', {exact: true})).toBeVisible();
-  await page.getByRole('link', {name: 'My profile', exact: true}).click();
+  await expect(page.getByText('Amazon · Lunch from Gate 2 · Room 304, Wing A', {exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Open my profile', exact: true}).click();
   await expect(page.getByText('Right at home.', {exact: true})).toBeVisible();
-  const helpName = testInfo.project.name === 'desktop' ? 'Help & support' : 'Help and support';
+  const helpName = 'Help and support';
   await page.getByRole('link', {name: helpName, exact: true}).click();
   await page.getByRole('button', {name: 'When do I pay the ₹10 fee?', exact: true}).click();
   await expect(page.getByText(/In the current demo the QR is nonpayable/)).toBeVisible();
-  await page.getByRole('link', {name: 'My profile', exact: true}).click();
+  await page.getByRole('button', {name: 'Open my profile', exact: true}).click();
   await page.getByRole('button', {name: 'Sign out', exact: true}).last().click();
   await expect(page.getByTestId('sign-in-submit')).toBeVisible();
   expect(browserErrors, 'Browser runtime errors').toEqual([]);

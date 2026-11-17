@@ -4,6 +4,14 @@ The student application, application backend, payments, database, and hardware/s
 
 The robotics team owns Gazebo, maps, navigation, routes, motor control, firmware, and physical hardware integration. This project consumes device telemetry and defines the authenticated commands/events needed for application behavior.
 
+## Download the Android QA app — v1.1.0
+
+[Download HostelXpress v1.1.0 APK](https://github.com/Anubhav-Sharma888/hostelxpress/releases/download/v1.1.0/HostelXpress-v1.1.0-QA.apk) · [Release notes](https://github.com/Anubhav-Sharma888/hostelxpress/releases/tag/v1.1.0)
+
+This standalone Android QA build includes the new Google Stitch Home, Booking, Tracking and Pickup interface. On the sign-in screen, choose **Skip sign-in for testing** for the offline QA Preview; sample data stays in memory and does not contact the backend, payment services or robots. The APK includes its JavaScript bundle and does not need Metro for this preview.
+
+The app is debug-signed for testing, not a production/store release. Current visual differences are accepted for this version and documented in [the Android review](docs/reviews/2026-11-17-stitch-android.md). Live-service setup and full physical-device/accessibility acceptance remain separate. Older dated QA assets contain older interfaces; use the v1.1.0 link above for this update.
+
 ## Current progress
 
 See [the current progress record](docs/progress.md) for the latest implementation status, verification and remaining inputs. Phases 0–2 have review records; Phase 3 application work is being verified for Android QA. Physical phone acceptance, live payment confirmation and hardware commissioning remain separate checks.

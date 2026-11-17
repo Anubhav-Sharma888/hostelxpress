@@ -106,3 +106,7 @@ econciliation_required\, and clean synchronous completion with empty compartment
 
 ## 15 November — Android build stall repaired
 Restored the existing build's scope from2.3GB/max2.2GB/high to authorized3.5GB/max2.8GB/high with two-CPU affinity. Severe memory throttling fell to nearzero and the same build produced the99,217,254-byte APK at15:18IST. Signature and bundledJavaScript verified. See docs/reviews/2026-11-15-build-stall-recovery.md. Physical-phone acceptance pending.
+
+## 17 November — new four-screen Stitch export, Android checkpoint
+
+Implemented Home/Booking/Tracking/Pickup from the latest delivery-app export in Ubuntu, based on `6200211` (local changes). Installed the new standalone QA build on the authorized Lava Agni 3, captured all four screens and the pickup preview states, and produced matching-width side-by-side comparisons. App tests 34/34, typecheck/lint and six demo browser journeys passed. A route scroll-reset issue found on Android was corrected and checked. Final build peak 2.53 GB under scoped 3.5 GB/two-CPU limits; no OOM. Exact visual parity remains open: header/modal structure, QA notices, touch-target spacing and documented data/behavior conflicts differ. See `docs/reviews/2026-11-17-stitch-android.md`. No live payments, robot operation or publication claimed.
