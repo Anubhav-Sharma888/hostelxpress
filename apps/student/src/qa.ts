@@ -4,7 +4,7 @@
 // normal screens, sample actions mutate local state only, and NOTHING here
 // calls Supabase, the API, payments, or rover services. Normal authentication
 // and backend authorization are untouched.
-import type {Bot, Order, OrderStatus, User} from './api';
+import type {Bot, Order, OrderStatus, PreviewSession, User} from './api';
 
 // Build-time flag. Expo inlines EXPO_PUBLIC_* at bundle time; unset means off.
 export const QA_PREVIEW = process.env.EXPO_PUBLIC_QA_PREVIEW === '1';
@@ -59,14 +59,11 @@ export const QA_ORDERS: Order[] = [
   sampleOrder({id: 'qa-order-done-0000-0000-0000-000000000002', status: 'Completed', payment_status: 'SimPaid', compartment_id: 1, createdMin: 1440, label: 'QA preview · yesterday tuck box'}),
 ];
 
-// The preview session's access_token field is a UI mode marker, not a
-// credential: nothing reads it (refresh is a no-op in preview), and it is
-// assembled at runtime from innocuous parts so it cannot be mistaken for a
-// stored secret.
-export const QA_SESSION = {
-  access_token: ['qa', 'preview', 'mode'].join('-'),
-  token_type: 'bearer',
-  expires_in: 86400,
+// The preview session carries no credential-shaped field: `Session` is a
+// discriminated union and the qa-preview variant has no access_token, so no
+// code on this path can hold or send a bearer token. refresh() is a no-op in
+// preview and every network consumer must narrow on `mode` first.
+export const QA_SESSION: PreviewSession = {
   mode: 'qa-preview',
   user: QA_USER,
 };

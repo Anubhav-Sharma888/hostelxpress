@@ -150,6 +150,9 @@ def acceptance():
              "-CAkey", str(private / "ca.key"), "-CAcreateserial", "-out", str(private / "server.crt"),
              "-days", "1", "-extfile", str(private / "server.extensions")])
         config = private / "mosquitto.conf"
+        # Same containment guard as mqtt_tls_proof: the broker config stays inside
+        # the harness directory and references only harness-local secrets.
+        assert private.resolve() in config.resolve().parents, "broker config must stay inside the harness directory"
         config.write_text("per_listener_settings true\nlistener " + str(MQTT_PORT) + " 127.0.0.1\nallow_anonymous false\npassword_file " + str(passwords) + "\nacl_file " + str(private / "broker.acl") + "\ncafile " + str(private / "ca.crt") + "\ncertfile " + str(private / "server.crt") + "\nkeyfile " + str(private / "server.key") + "\ntls_version tlsv1.2\npersistence false\nlog_type error\n")
         with open(private / "broker.log", "w", encoding="utf-8") as log:
             broker = subprocess.Popen(["mosquitto", "-c", str(config)], stdout=log, stderr=subprocess.STDOUT)
@@ -200,7 +203,7 @@ def acceptance():
         settings = Settings(app_env="production", database_url=db_url, supabase_url="https://acceptance.invalid",
                             worker_enabled=True, mqtt_host="localhost", mqtt_port=MQTT_PORT,
                             mqtt_ca_file=str(private / "ca.crt"), mqtt_username=pub_user, mqtt_password=pub_credential,
-                            mqtt_ingest_username=ingest_user, mqtt_ingest_credential=ingest_credential,
+                            mqtt_ingest_username=ingest_user, mqtt_ingest_password=ingest_credential,
                             mqtt_ingest_client_id="acceptance-ingest-" + uuid.uuid4().hex, trusted_hosts="127.0.0.1,localhost")
         app = create_app(settings)
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=HTTP_PORT, access_log=False, log_config=None, log_level="warning"))
@@ -232,7 +235,7 @@ def acceptance():
         def device(now=None, ledger_path=None):
             link = HostelxpressLink(str(bot_id), ledger_path or ledger,
                                     broker=BrokerConfig(host="localhost", port=MQTT_PORT, username=bot_user, password=bot_credential, ca_file=str(private / "ca.crt")),
-                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_credential=device_credential,
+                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_secret=device_credential,
                                     allow_loopback_http=True, guard=guard, on_unlock=on_unlock,
                                     clock_synchronized=lambda: True, now=now)
             links.append(link)
@@ -275,6 +278,9 @@ def acceptance():
             signature = hmac.new(device_credential.encode(), stamp.encode() + b".POST." + path.encode() + b"." + raw, hashlib.sha256).hexdigest()
             request = Request("http://127.0.0.1:" + str(HTTP_PORT) + path, data=raw, method="POST",
                               headers={"Content-Type": "application/json", "X-Device-Timestamp": stamp, "X-Device-Signature": signature})
+            # Same loopback guard as mqtt_tls_proof: the signed-device transport
+            # proof targets the harness-local API only.
+            assert request.full_url.startswith("http://127.0.0.1:"), "the transport proof must target the local harness API only"
             with urlopen(request, timeout=5) as response:
                 receipt = json.loads(response.read(65537))
             receipts.append(receipt)

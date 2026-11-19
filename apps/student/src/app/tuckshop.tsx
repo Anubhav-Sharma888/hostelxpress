@@ -12,7 +12,9 @@ const QUOTE_VALID_MS = 10 * 60 * 1000; // the server rejects orders on expired q
 // only from the server quote; the client never computes what a student pays.
 export default function TuckShop() {
   const {session} = useApp();
-  const token = session?.access_token ?? '';
+  // Preview sessions carry no credential field; the QA-preview notice renders
+  // below and an empty token keeps every effect offline.
+  const token = session && session.mode !== 'qa-preview' ? session.access_token : '';
   const router = useRouter();
   const params = useLocalSearchParams<{merchant_id?: string}>();
   const [schedule, setSchedule] = useState<PilotSchedule | null>(null);

@@ -5,7 +5,7 @@ import type {OrderStatus} from '../api';
 import {hostelName} from '../campus';
 import {Icon, T} from '../ui';
 
-export function CampusMap({status, hostel = 'C'}: {status?: OrderStatus; hostel?: string}) {
+export function CampusMap({status, hostel = 'C', rover}: {status?: OrderStatus; hostel?: string; rover?: string}) {
   const arrived = status && ['Arrived', 'Paid', 'Completed'].includes(status);
   const position = arrived ? {x: 306, y: 65} : status === 'Transit' ? {x: 201, y: 120} : {x: 42, y: 191};
   return <View style={{gap: 12}}>
@@ -27,6 +27,10 @@ export function CampusMap({status, hostel = 'C'}: {status?: OrderStatus; hostel?
         <Rect x={position.x - 9} y={position.y - 6} width={18} height={13} rx={3} fill="#FFFFFF" />
         <Circle cx={position.x - 4} cy={position.y} r={1.6} fill="#FF5E00" />
         <Circle cx={position.x + 4} cy={position.y} r={1.6} fill="#FF5E00" />
+        {rover && <>
+          <Rect x={position.x - 44} y={position.y - 34} width={88} height={18} rx={9} fill="#213145" />
+          <SvgText x={position.x} y={position.y - 21} fontFamily="sans-serif" textAnchor="middle" fontSize={9} fontWeight="600" fill="#FFFFFF">{rover}</SvgText>
+        </>}
         <SvgText x={41} y={220} fontFamily="sans-serif" textAnchor="middle" fontSize={11} fontWeight="600" fill="#0B1C30">Gate 2</SvgText>
         <SvgText x={190} y={151} fontFamily="sans-serif" textAnchor="middle" fontSize={10} fill="#565E74">Academic Ring</SvgText>
         <SvgText x={300} y={94} fontFamily="sans-serif" textAnchor="middle" fontSize={10} fill="#0B1C30">{hostelName(hostel)}</SvgText>

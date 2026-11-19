@@ -11,7 +11,12 @@ export type Order = {
   payment_status: string | null; failure_reason?: string | null; is_demo?: boolean;
 };
 export type DemoAction = 'load' | 'dispatch' | 'arrive' | 'pay' | 'close_lid';
-export type Session = { access_token: string; token_type: string; expires_in: number; mode: string; user: User };
+// Real and demo sessions carry a server-issued bearer token. The offline QA
+// preview session carries no credential-shaped field at all: nothing on that
+// path can authenticate, so nothing there can reach a backend.
+export type AuthedSession = { mode: 'real' | 'demo'; access_token: string; token_type: string; expires_in: number; user: User };
+export type PreviewSession = { mode: 'qa-preview'; user: User };
+export type Session = AuthedSession | PreviewSession;
 export type Payment = { order_id: string; amount: number; currency: string; provider: 'demo' | 'razorpay'; status: 'pending' | 'paid'; qr_image_url: string | null; qr_payload: string | null; expires_at: string | null };
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');

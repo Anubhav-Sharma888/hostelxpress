@@ -14,7 +14,9 @@ const merchantPhotos = {
 export default function AfterHours() {
   const {session} = useApp();
   const {width} = useWindowDimensions();
-  const token = session?.access_token ?? '';
+  // Preview sessions carry no credential field; an empty token keeps the
+  // schedule/merchant effects from attempting any backend call.
+  const token = session && session.mode !== 'qa-preview' ? session.access_token : '';
   const [schedule, setSchedule] = useState<PilotSchedule | null>(null);
   const [merchants, setMerchants] = useState<PilotMerchant[]>([]);
   const [error, setError] = useState<string | null>(null);

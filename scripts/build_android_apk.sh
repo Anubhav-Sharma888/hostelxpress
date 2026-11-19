@@ -119,8 +119,16 @@ if [[ $PREP_ONLY -eq 1 ]]; then
   exit 0
 fi
 TASK="assemble${VARIANT^}"
+# Bundle-task inputs mirror the public env so a flip re-runs the Hermes bundle
+# (see plugins/withAndroidBundleEnv.cjs). Plain -P strings, no lazy providers.
+BUNDLE_PROPS=(
+  "-PEXPO_PUBLIC_QA_PREVIEW=${EXPO_PUBLIC_QA_PREVIEW:-0}"
+  "-PEXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-}"
+  "-PEXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL:-}"
+  "-PEXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}"
+)
 # Resource-capped builds: two workers, no parallel projects, background priority.
-(cd "$APP_ROOT/android" && nice -n 10 ./gradlew "$TASK" --no-daemon --max-workers=2 --no-parallel -q </dev/null)
+(cd "$APP_ROOT/android" && nice -n 10 ./gradlew "$TASK" --no-daemon --max-workers=2 --no-parallel "${BUNDLE_PROPS[@]}" -q </dev/null)
 APK="$APP_ROOT/android/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 [[ -f "$APK" ]] || { printf 'Build finished but no APK at %s\n' "$APK" >&2; exit 1; }
 printf '\nAPK: %s\nvariant: %s; local_qa: %s\n' "$APK" "$VARIANT" "$LOCAL_QA"

@@ -21,7 +21,7 @@ const pickupLabels = ['Pay Due', 'Verify', 'Assigned', 'Done'];
 export default function DeliveryDetail() {
   const {id} = useLocalSearchParams<{id: string}>();
   const {session} = useApp();
-  return <DeliveryContent key={id + ':' + (session?.access_token || 'signed-out')} />;
+  return <DeliveryContent key={id + ':' + (session ? (session.mode === 'qa-preview' ? 'qa-preview:' + session.user.id : session.access_token) : 'signed-out')} />;
 }
 
 function DeliveryContent() {
@@ -75,7 +75,7 @@ function DeliveryContent() {
     finally { setBusy(false); }
   };
   const preparePayment = async () => {
-    if (!session || qa || busy) return;
+    if (!session || session.mode === 'qa-preview' || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -100,11 +100,6 @@ function DeliveryContent() {
   </View>;
 
   return <View style={{gap: 16, paddingBottom: 16}}>
-    <Pressable accessibilityRole="link" accessibilityLabel="Back to deliveries" onPress={() => router.push('/deliveries')}
-      style={{minHeight: 48, flexDirection: 'row', gap: 8, alignItems: 'center'}}>
-      <Icon name="arrow-back-outline" size={22} color={S.ink} />
-      <T style={{fontFamily: 'DMSansBold', fontSize: 18}}>{handover ? 'Locker Pin Pickup' : 'Rover Live Tracking'}</T>
-    </Pressable>
     {error && <ErrorNotice message={error} />}
     {qa && previewControls}
     {handover ? <>
@@ -123,7 +118,7 @@ function DeliveryContent() {
             <Icon name="hardware-chip-outline" color="#A63B00" />
           </View>
           <View style={{flex: 1, minWidth: 0}}>
-            <T style={{fontFamily: 'DMSansBold', fontSize: 14}}>{qa ? 'QA sample rover' : 'Campus rover'}</T>
+            <T style={{fontFamily: 'DMSansBold', fontSize: 14}}>{qa ? 'QA sample rover' : order.bot ? 'Rover Bot ' + shortId(order.bot.id) : 'Campus rover'}</T>
             <T style={{fontSize: 12, color: S.muted}}>{destination} Hostel entrance</T>
           </View>
           <View style={{maxWidth: '32%'}}><Label>Order ref</Label><T style={{fontFamily: 'DMSansBold', fontSize: 12}}>{shortId(order.id)}</T></View>
@@ -218,7 +213,8 @@ function DeliveryContent() {
       </Card>
       <Card style={card}>
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}><Icon name="git-branch-outline" color="#A63B00" /><Heading style={title}>Live Path &amp; Guidance</Heading></View>
-        <CampusMap status={order.status} hostel={order.destination_hostel_block} />
+        <CampusMap status={order.status} hostel={order.destination_hostel_block}
+          rover={order.bot && !stale ? 'ROVER ' + shortId(order.bot.id) : undefined} />
       </Card>
       <Card style={card}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>

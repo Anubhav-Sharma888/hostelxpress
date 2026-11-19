@@ -32,8 +32,12 @@ test('sample booking is local, labelled, and priced like a standard parcel', () 
   assert.equal(booking.timeline.length, 1);
 });
 
-test('preview session marker is a mode label, assembled, not a stored secret', () => {
-  assert.equal(QA_SESSION.access_token, ['qa', 'preview', 'mode'].join('-'));
+test('preview session carries no credential-shaped field', () => {
   assert.equal(QA_SESSION.mode, 'qa-preview');
   assert.equal(QA_SESSION.user.name, 'QA Preview Student');
+  // The Session union gives the qa-preview variant no token fields at all:
+  // nothing on the preview path can hold or send a bearer token.
+  assert.equal('access_token' in QA_SESSION, false);
+  assert.equal('token_type' in QA_SESSION, false);
+  assert.equal('expires_in' in QA_SESSION, false);
 });
