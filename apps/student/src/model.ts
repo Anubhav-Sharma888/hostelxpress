@@ -1,4 +1,4 @@
-import type {DemoAction, Order, OrderStatus} from './api';
+import type {Bot, DemoAction, Order, OrderStatus} from './api';
 
 // Google Stitch export, 17 November 2026: orange actions, navy text, lavender surfaces.
 export const COLORS = {
@@ -33,4 +33,12 @@ export const nextDemoAction = (status: OrderStatus): {action: DemoAction; label:
 })[status];
 export function isStale(lastSeen?: string | null, now = Date.now()) {
   return !lastSeen || !Number.isFinite(Date.parse(lastSeen)) || now - Date.parse(lastSeen) > 15000;
+}
+
+export function freshRoverPosition(bot: Bot | null, now = Date.now()) {
+  if (!bot || isStale(bot.last_seen_at, now) || isStale(bot.telemetry_observed_at, now)) return null;
+  const {current_lat: lat, current_lng: lng} = bot;
+  if (typeof lat !== 'number' || !Number.isFinite(lat) || Math.abs(lat) > 90 ||
+      typeof lng !== 'number' || !Number.isFinite(lng) || Math.abs(lng) > 180) return null;
+  return {lat, lng};
 }

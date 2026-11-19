@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
+from app.auth import Principal,current_user
 from app.config import Settings
 from app.main import create_app
 
@@ -23,9 +24,13 @@ class Provider:
         self.amount=1000
         self.status="captured"
         self.calls=0
-    def payment_and_qrs(self,payment_id):
+        self.qr_payment_matches=True
+    def payment_and_qrs(self,payment_id,qr_id=None):
         self.calls+=1
-        return {'id':payment_id,'status':self.status,'captured':self.status=='captured','amount':self.amount,'currency':'INR'},[{'id':self.qr_id}]
+        return {'id':payment_id,'status':self.status,'captured':self.status=='captured','amount':self.amount,'currency':'INR'},[{'id':qr_id or self.qr_id}]
+
+    def payment_matches_qr(self,payment_id,qr_id):
+        return self.qr_payment_matches and qr_id==self.qr_id
 
 
 @pytest.fixture
@@ -68,6 +73,35 @@ def device(live,body):
 def base(live,kind):
     return {'schema_version':1,'message_type':kind,'message_id':str(uuid4()),'bot_id':str(live['bot']),
             'sent_at':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
+
+
+@pytest.mark.parametrize("missing", ["razorpay_key_id", "razorpay_key_secret", "razorpay_webhook_secret"])
+def test_unconfigured_qr_is_refused_before_creating_intent(missing, monkeypatch):
+    settings = Settings(
+        app_env="production",
+        database_url="host=/tmp dbname=unused",
+        supabase_url="https://example.supabase.invalid",
+        razorpay_key_id="fixture",
+        razorpay_key_secret="fixture",
+        razorpay_webhook_secret="fixture",
+    )
+    monkeypatch.setattr(settings, missing, "")
+    app = create_app(settings)
+    app.dependency_overrides[current_user] = lambda: Principal(uuid4(), False)
+    # Bypass lifespan so any attempt to use the database will fail the test.
+    response = TestClient(app).post(f"/v1/orders/{uuid4()}/payment")
+    assert response.status_code == 503
+    assert "Payments are not configured" in response.json()["detail"]
+
+
+def test_qr_credited_uses_webhook_identity_and_provider_confirmation(live):
+    payload={"payment":{"entity":{"id":"pay_test_fixture"}},
+             "qr_code":{"entity":{"id":live['qr']}}}
+    provider=live['client'].app.state.provider
+    provider.qr_payment_matches=False
+    assert webhook(live,event_type='qr_code.credited',extra={'payload':payload}).status_code==400
+    provider.qr_payment_matches=True
+    assert webhook(live,event_type='qr_code.credited',extra={'payload':payload}).status_code==200
 
 
 def test_verified_capture_is_atomic_and_idempotent(live):

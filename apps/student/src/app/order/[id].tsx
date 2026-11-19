@@ -5,7 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import {Order, Payment, request} from '../../api';
 import {hostelName} from '../../campus';
 import {CampusMap} from '../../components/CampusMap';
-import {FLOW, formatAmount, formatTime, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
+import {FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
 import {useApp} from '../../state';
 import {useClock} from '../../hooks/useClock';
 import {Button, Card, ErrorNotice, Heading, Icon, Label, Loading, T} from '../../ui';
@@ -61,6 +61,7 @@ function DeliveryContent() {
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
   const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
   const next = nextDemoAction(order.status);
+  const roverPosition = session?.mode === 'real' ? freshRoverPosition(order.bot, now) : null;
   const destination = hostelName(order.destination_hostel_block);
   const status = unlocked ? 'Ready to collect' : order.status === 'Arrived' ? 'Arrived · Awaiting payment' : STATUS_COPY[order.status].label;
   const stageNames = ['Parcel verified & loaded', 'Compartment sealed', 'Rover dispatched across campus', 'Hostel arrival & locker unlock'];
@@ -101,7 +102,9 @@ function DeliveryContent() {
 
   return <View style={{gap: 16, paddingBottom: 16}}>
     {error && <ErrorNotice message={error} />}
-    {qa && previewControls}
+    {previewControls}
+    {qa && !handover && <Button variant="secondary" icon="wallet-outline"
+      onPress={() => setPreviewStage(0)} testID="qa-payment-preview">Preview payment screen</Button>}
     {handover ? <>
       <View style={{backgroundColor: S.pale, borderRadius: 12, padding: 5, flexDirection: 'row', gap: 4}}>
         {pickupLabels.map((label, index) => <View key={label} style={{flex: 1, minWidth: 0, paddingVertical: 10, paddingHorizontal: 3,
@@ -136,7 +139,7 @@ function DeliveryContent() {
         </View>
         <View style={{padding: 14, backgroundColor: S.blue, borderRadius: 10, flexDirection: 'row', gap: 10, alignItems: 'center'}}>
           <Icon name="wallet-outline" color="#A63B00" />
-          <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>UPI Direct / QR</T><T style={{fontSize: 12, color: S.muted}}>Provider-supplied payment code</T></View>
+          <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>UPI QR</T><T style={{fontSize: 12, color: S.muted}}>{qa ? 'Offline sample' : 'Scan with a UPI app on another device'}</T></View>
           <Icon name="checkmark-circle-outline" color={S.teal} />
         </View>
         <View style={{padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', opacity: .55}}>
@@ -162,7 +165,7 @@ function DeliveryContent() {
           <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Verified payment authorizes an unlock request. Wait for the rover to confirm your assigned compartment is open.</T>
         </View>
         <Button onPress={() => void preparePayment()} loading={busy} disabled={qa} icon="flash-outline" testID="payment-create"
-          accessibilityLabel="Prepare payment preview">{expired ? 'Refresh payment preview' : 'Pay ' + formatAmount(order.amount) + ' via UPI'}</Button>
+          accessibilityLabel="Show UPI payment QR">{expired ? 'Refresh payment QR' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}</Button>
         {qa && <T style={{fontSize: 12, color: S.muted}}>Offline sample · Payments require the connected backend.</T>}
       </Card>}
 
@@ -210,11 +213,18 @@ function DeliveryContent() {
           {order.status === 'Transit' ? 'ROVER EN ROUTE TO ' + destination.toUpperCase() + ' HOSTEL' : STATUS_COPY[order.status].title}
         </Heading>
         <T style={{fontSize: 13, lineHeight: 20, color: '#DAE2FD'}}>→ Next: Meet rover at Hostel Porch upon arrival</T>
+        {!qa && ['Pending', 'Loaded', 'Transit'].includes(order.status) &&
+          <T style={{fontSize: 12, color: '#DAE2FD'}}>Payment opens when the rover arrives.</T>}
       </Card>
       <Card style={card}>
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}><Icon name="git-branch-outline" color="#A63B00" /><Heading style={title}>Live Path &amp; Guidance</Heading></View>
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}><Icon name="git-branch-outline" color="#A63B00" /><Heading style={title}>Campus route overview</Heading></View>
         <CampusMap status={order.status} hostel={order.destination_hostel_block}
           rover={order.bot && !stale ? 'ROVER ' + shortId(order.bot.id) : undefined} />
+        {session?.mode === 'real' && <T style={{fontSize: 12, color: S.muted}}>
+          {roverPosition
+            ? 'Latest rover GPS fix ' + roverPosition.lat.toFixed(6) + ', ' + roverPosition.lng.toFixed(6)
+            : 'A fresh rover GPS fix is unavailable.'}
+        </T>}
       </Card>
       <Card style={card}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>

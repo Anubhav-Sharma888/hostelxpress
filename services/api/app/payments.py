@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from datetime import timedelta
 from uuid import uuid4
 
@@ -36,10 +37,21 @@ class RazorpayProvider:
             'payment_amount':1000,'close_by':int(expires_at.timestamp()),
             'notes':{'hostelxpress_order_id':str(order_id),'request_id':str(request_id)}})
 
-    def payment_and_qrs(self,payment_id):
+    def payment_and_qrs(self,payment_id,qr_id=None):
         payment = self.request('GET','/payments/'+payment_id)
+        if qr_id is not None:
+            return payment,[{'id':qr_id}]
+        # Generic payment events may omit a QR ID. These results only discover
+        # candidates. The QR-specific endpoint must confirm the relationship.
         qrs = self.request('GET','/payments/qr_codes',params={'payment_id':payment_id})
         return payment,qrs.get('items',[])
+
+    def payment_matches_qr(self,payment_id,qr_id):
+        if not re.fullmatch(r'qr_[A-Za-z0-9_-]{1,125}',qr_id):
+            return False
+        result = self.request('GET','/payments/qr_codes/'+qr_id+'/payments',params={'count':100})
+        items = result.get('items',[]) if isinstance(result,dict) else []
+        return isinstance(items,list) and any(isinstance(item,dict) and item.get('id')==payment_id for item in items)
 
 
 def response(payment):
@@ -127,9 +139,16 @@ def process_webhook(db,provider,raw,event_id):
             if not isinstance(entity,dict):
                 raise HTTPException(400,'Malformed provider payment resource')
             payment_id=entity.get('id')
-            if not isinstance(payment_id,str) or not payment_id.startswith('pay_') or len(payment_id)>128:
+            if not isinstance(payment_id,str) or not re.fullmatch(r'pay_[A-Za-z0-9_-]{1,124}',payment_id):
                 raise HTTPException(400,'Missing provider payment identity')
-            payment,qrs=provider.payment_and_qrs(payment_id)
+            qr_wrapper=payload.get('qr_code')
+            qr_entity=qr_wrapper.get('entity') if isinstance(qr_wrapper,dict) else None
+            qr_id=qr_entity.get('id') if isinstance(qr_entity,dict) else None
+            if event_type=='qr_code.credited' and (
+                not isinstance(qr_id,str) or not re.fullmatch(r'qr_[A-Za-z0-9_-]{1,125}',qr_id)
+            ):
+                raise HTTPException(400,'Missing provider QR identity')
+            payment,qrs=provider.payment_and_qrs(payment_id,qr_id if event_type=='qr_code.credited' else None)
             expected_status='failed' if event_type=='payment.failed' else 'captured'
             valid_state=isinstance(payment,dict) and (payment.get('status')==expected_status or (expected_status=='failed' and payment.get('status')=='captured' and payment.get('captured') is True))
             if not (valid_state and payment.get('id')==payment_id
@@ -139,7 +158,7 @@ def process_webhook(db,provider,raw,event_id):
             qr_ids=[qr['id'] for qr in qrs if isinstance(qr,dict) and isinstance(qr.get('id'),str)]
             candidates=conn.execute('SELECT * FROM public.transactions WHERE razorpay_qr_id=ANY(%s) AND is_demo=false',(qr_ids,)).fetchall() if qr_ids else []
             candidate=candidates[0] if len(candidates)==1 else None
-            if not candidate:
+            if not candidate or not provider.payment_matches_qr(payment_id,candidate['razorpay_qr_id']):
                 raise HTTPException(400,'Payment does not belong to a saved application QR')
             order,bot=service.lock_order(conn,candidate['order_id'])
             candidate=conn.execute('SELECT * FROM public.transactions WHERE id=%s FOR UPDATE',(candidate['id'],)).fetchone()

@@ -124,7 +124,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
         with request.app.state.db.connection() as conn:
             conn.execute('SELECT 1')
         return {'status':'ok','mode':'demo' if settings.is_demo else 'production','database':'ready',
-                'integrations':{'payments':'demo' if settings.is_demo else ('configured' if settings.razorpay_key_id else 'disabled'),
+                'integrations':{'payments':'demo' if settings.is_demo else ('configured' if settings.razorpay_configured else 'disabled'),
                                 'mqtt':'configured' if settings.mqtt_host and not settings.is_demo else 'disabled'}}
 
     @app.post('/auth/demo')
@@ -192,6 +192,8 @@ def create_app(settings:Settings | None=None) -> FastAPI:
 
     @app.post('/v1/orders/{order_id}/payment')
     def payment(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if not user.is_demo and not settings.razorpay_configured:
+            raise HTTPException(503,'Payments are not configured yet. Contact HostelXpress support.')
         return payments.create_payment(request.app.state.db,request.app.state.provider,order_id,user.id,user.is_demo)
 
     @app.post('/v1/demo/orders/{order_id}/advance')

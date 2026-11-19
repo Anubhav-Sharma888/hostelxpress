@@ -62,10 +62,13 @@ class ProviderFixture:
         self.qr_id, self.amount, self.currency, self.captured = qr_id, amount, currency, captured
         self.calls = 0
 
-    def payment_and_qrs(self, payment_id):
+    def payment_and_qrs(self, payment_id, qr_id=None):
         self.calls += 1
         return {"id": payment_id, "status": "captured", "captured": self.captured,
-                "amount": self.amount, "currency": self.currency}, [{"id": self.qr_id}]
+                "amount": self.amount, "currency": self.currency}, [{"id": qr_id or self.qr_id}]
+
+    def payment_matches_qr(self, payment_id, qr_id):
+        return qr_id == self.qr_id
 
 
 def webhook(live, event_id, *, payment_id="pay_independent_security", event_type="payment.captured", signature=None):

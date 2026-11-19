@@ -56,6 +56,12 @@ class Settings(BaseSettings):
         return self.app_env in {'demo','test'}
 
     @property
+    def razorpay_configured(self) -> bool:
+        return all(value.strip() for value in (
+            self.razorpay_key_id, self.razorpay_key_secret, self.razorpay_webhook_secret
+        ))
+
+    @property
     def issuer(self) -> str:
         return self.supabase_url.rstrip('/') + '/auth/v1'
 

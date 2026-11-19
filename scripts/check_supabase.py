@@ -62,8 +62,8 @@ def check_http(base_url: str, results: dict) -> None:
         if publishable:
             settings_response = client.get(base_url + "/auth/v1/settings", headers=auth_headers)
             results["publishable_key_accepted"] = settings_response.status_code == 200
-            if settings_response.status_code == 401:
-                raise RuntimeError("Supabase rejected the publishable key")
+            if settings_response.status_code != 200:
+                raise RuntimeError(f"Publishable-key check returned HTTP {settings_response.status_code}")
         results["provider"] = "real Supabase Auth over HTTPS"
 
 
@@ -103,7 +103,7 @@ def check_schema(results: dict) -> None:
                 raise RuntimeError(f"Row level security is not enabled on public.{table}")
         applied = [r["version"] for r in conn.execute("SELECT version FROM hostelxpress_private.schema_migrations ORDER BY version").fetchall()]
         results["migrations_applied"] = applied
-        required = {"0001_application_core", "0002_device_reconciliation"}
+        required = {"0001_application_core", "0002_device_reconciliation", "0003_after_hours_pilot"}
         if not required.issubset(set(applied)):
             raise RuntimeError(f"Apply the remaining migrations in supabase/migrations/: {sorted(required - set(applied))}")
         results["schema_and_rls"] = "passed"

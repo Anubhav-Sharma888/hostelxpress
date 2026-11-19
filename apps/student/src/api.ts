@@ -3,7 +3,7 @@ import {createClient, SupabaseClient} from '@supabase/supabase-js';
 
 export type OrderStatus = 'Pending' | 'Loaded' | 'Transit' | 'Arrived' | 'Paid' | 'Completed' | 'Failed';
 export type User = { id: string; name: string; hostel_block: string | null };
-export type Bot = { id: string; status: string; battery_level: number | null; current_lat: number | null; current_lng: number | null; last_seen_at: string | null; load_deadline_at?: string | null };
+export type Bot = { id: string; status: string; battery_level: number | null; current_lat: number | null; current_lng: number | null; last_seen_at: string | null; telemetry_observed_at?: string | null; load_deadline_at?: string | null };
 export type Order = {
   id: string; status: OrderStatus; destination_hostel_block: string; parcel_label: string | null;
   amount: number; currency: string; created_at: string; rider_due_at: string;

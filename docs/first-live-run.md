@@ -4,21 +4,23 @@ Prepared 19 November 2026. Each step below passes or fails on its own printed
 evidence and does not depend on any later step. No secret values belong in this
 file, in command output, or in Git; everything listed is a configuration *name*.
 
-Operator inputs (held by you, never in the repo): Supabase project URL +
-publishable key, a dedicated `DATABASE_URL` role with RLS bypass, Razorpay key
-pair + webhook secret (after KYC), one real student sign-in for the token
-check, and an enrolled rover with its signed connector secret (robotics team).
+Use a staging Supabase project and an HTTPS FastAPI host for the first run.
+The app build uses the project URL, Supabase publishable key, HTTPS API URL,
+and `EXPO_PUBLIC_SUPPORT_PHONE` (international format, visible to app users).
+Store the dedicated database connection, Razorpay test keys and webhook secret,
+and hardware credentials only in their respective server or device environments.
 
 ## Step 1 — Supabase project health (read-only, no app, no backend)
 
 ```bash
-HOSTELXPRESS_CHECK_SUPABASE=1 SUPABASE_URL=... SUPABASE_PUBLISHABLE_KEY=... \
-HOSTELXPRESS_SUPABASE_TEST_TOKEN=<student JWT> python3 scripts/check_supabase.py
+HOSTELXPRESS_CHECK_SUPABASE=1 python3 scripts/check_supabase.py
 ```
 
-Pass: Auth JWKS reachable, publishable key accepted, schema/RLS/migrations
-present, and one real token verifies against the production path.
-Does NOT prove: the API is running, booking works, or payment is configured.
+Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_DB_URL` in the
+environment or ignored checkout-root `.env`. With all three configured, require
+successful Auth health, a publishable-key check, and `schema_and_rls: passed`.
+The optional `HOSTELXPRESS_SUPABASE_TEST_TOKEN` needs a student JWT and can be
+checked after sign-in.
 
 **Stop if it fails:** fix the Supabase project (run `supabase/init.sql` then
 each migration in filename order) before any later step.
@@ -26,7 +28,7 @@ each migration in filename order) before any later step.
 ## Step 2 — API process health (production mode, no app)
 
 ```bash
-APP_ENV=production uvicorn app.main:app --host 0.0.0.0 --port 8000
+APP_ENV=production PYTHONPATH=services/api uvicorn app.main:app --host 0.0.0.0 --port 8000
 curl -fsS https://<api-host>/health
 ```
 
@@ -45,8 +47,9 @@ Build/start the app in real mode (`EXPO_PUBLIC_SUPABASE_URL` +
 `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` + HTTPS `EXPO_PUBLIC_API_URL`) and sign
 in with a real Supabase student account.
 
-Pass: Home renders with the real profile; no QA-preview controls appear;
-Profile shows the signed-in student; sign-out and repeat sign-in both work.
+Use email/password on the sign-in screen. Skip sign-in remains available for
+offline QA. Require Home and Profile to show the real student after real sign-in,
+then verify sign-out and repeat sign-in.
 Does NOT prove: booking (Step 4) or anything hardware-related.
 
 **Stop if it fails:** the Supabase email/password provider and the app's
@@ -69,9 +72,25 @@ server-side; the order legitimately stays `Pending`.
 | Step | Needs | Why |
 | --- | --- | --- |
 | Dispatch → transit → arrival | **enrolled rover** (robotics team, `provision-bot` + signed connector, fresh telemetry) | the backend records arrival only from signed device events |
-| Payment QR creation | arrival (rover) + **Razorpay KYC** | the QR is a single-use Razorpay object for exactly ₹10 |
-| Webhook confirmation | Razorpay webhook registered at `/webhooks/razorpay` | server-side capture verification |
+| Payment QR creation | arrived order + Razorpay test credentials and QR support | the QR is a single-use Razorpay object for exactly ₹10 |
+| Webhook confirmation | test-mode webhook at `/webhooks/razorpay` with the matching test webhook secret and `qr_code.credited` enabled | signed server-side capture and QR verification |
+| Live payments | merchant onboarding and live QR activation | use separate live credentials and a separate live webhook after the test passes |
 | Unlock → collection → completion | enrolled rover | payment authorizes the unlock request; only the rover confirms physical unlock |
+
+Use test credentials to check provider setup and keep real money out of staging.
+Razorpay's documentation limits scanning QR Codes to live mode. Use application
+fixtures for the offline QR and capture rehearsal, then verify a controlled live
+scan separately once merchant onboarding and live QR activation are complete.
+
+## Live tracking acceptance
+
+The enrolled rover publishes GPS, battery and compartment telemetry to the TLS
+MQTT broker and posts signed delivery events to the HTTPS API. The API stores
+the latest valid fix and order state in PostgreSQL. The signed-in app polls its
+own orders about every five seconds while active. On a real active order,
+compare the displayed GPS fix to known rover coordinates, then pause telemetry
+and verify that the fix becomes unavailable. The campus route drawing is a
+delivery-stage schematic. A moving pin requires a georeferenced campus map.
 
 ## Failure handling
 
