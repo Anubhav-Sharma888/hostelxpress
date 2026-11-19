@@ -48,9 +48,10 @@ export NODE_ENV=development
 export HX_ANDROID_LOCAL_QA=$LOCAL_QA
 PUBLIC_ENV=$(cd "$APP_ROOT" && node <<'JS'
 require('@expo/env').loadProjectEnv(process.cwd(), {silent: true});
+process.env.EXPO_PUBLIC_QA_PREVIEW ||= '1';
 require('./plugins/withAndroidNetwork.cjs').validateBuildUrl(
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000', process.env.HX_ANDROID_LOCAL_QA === '1');
-for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY']) {
+for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'EXPO_PUBLIC_QA_PREVIEW']) {
   if (process.env[key] !== undefined) {
     if (/[\r\n]/.test(process.env[key])) throw new Error('Public app configuration must be single-line.');
     process.stdout.write(`${key}=${process.env[key]}\n`);
@@ -122,7 +123,7 @@ TASK="assemble${VARIANT^}"
 # Bundle-task inputs mirror the public env so a flip re-runs the Hermes bundle
 # (see plugins/withAndroidBundleEnv.cjs). Plain -P strings, no lazy providers.
 BUNDLE_PROPS=(
-  "-PEXPO_PUBLIC_QA_PREVIEW=${EXPO_PUBLIC_QA_PREVIEW:-0}"
+  "-PEXPO_PUBLIC_QA_PREVIEW=$EXPO_PUBLIC_QA_PREVIEW"
   "-PEXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-}"
   "-PEXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL:-}"
   "-PEXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}"

@@ -1,13 +1,13 @@
-// Offline QA preview: a build-time opt-in (EXPO_PUBLIC_QA_PREVIEW=1) that
-// adds a "Skip sign-in for testing" entry to the real-mode sign-in screen.
+// Offline QA preview is enabled until database sign-in is ready.
+// Set EXPO_PUBLIC_QA_PREVIEW=0 to build without the skip option.
 // The preview session is purely in-memory: sample orders render through the
 // normal screens, sample actions mutate local state only, and NOTHING here
 // calls Supabase, the API, payments, or rover services. Normal authentication
 // and backend authorization are untouched.
 import type {Bot, Order, OrderStatus, PreviewSession, User} from './api';
 
-// Build-time flag. Expo inlines EXPO_PUBLIC_* at bundle time; unset means off.
-export const QA_PREVIEW = process.env.EXPO_PUBLIC_QA_PREVIEW === '1';
+// Expo inlines the flag at bundle time. Unset or empty uses the QA default.
+export const QA_PREVIEW = (process.env.EXPO_PUBLIC_QA_PREVIEW || '1') === '1';
 
 export const QA_PREVIEW_LABEL = 'QA PREVIEW';
 

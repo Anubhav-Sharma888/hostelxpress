@@ -27,6 +27,10 @@ That command still produces a debug-signed tester artifact. Production signing, 
 
 Options: `--app-dir <dir>` chooses another student source directory; `--prep-only` applies the toolchain/native setup without Gradle; `--help` prints usage. Invalid arguments fail before setup starts.
 
+The student sign-in screen offers **Skip sign-in for testing** by default
+until database sign-in is enabled. It opens an offline preview with sample data.
+Set `EXPO_PUBLIC_QA_PREVIEW=0` explicitly to package a build without this option.
+
 ## SDK license review
 
 The script downloads a pinned Temurin JDK **17.0.21+9** and Google command-line tools archive **11076708** when absent. If SDK licenses have not been accepted, it stops and prints a command to review them interactively, for example:
