@@ -43,6 +43,15 @@ function DeliveryContent() {
       <Button onPress={() => router.replace('/deliveries')}>Back to my deliveries</Button>
     </View>;
   }
+  if (session?.mode === 'real' && storedOrder.is_demo) {
+    return <Card style={{...card, gap: 10}}>
+      <Label>{shortId(storedOrder.id)}</Label>
+      <Heading style={title}>Test booking saved</Heading>
+      <T>{storedOrder.parcel_label} · {hostelName(storedOrder.destination_hostel_block)}</T>
+      <T style={{color:S.muted}}>Your booking is stored in staging. It has no rover assignment and no charge.</T>
+      <Button variant="secondary" onPress={() => router.push({pathname:'/deliveries',params:{view:'active'}})}>Back to active orders</Button>
+    </Card>;
+  }
   // Preview controls render local fixture states only. They never send commands or payments.
   const order: Order = qa && previewStage !== null ? {
     ...storedOrder,
@@ -198,7 +207,7 @@ function DeliveryContent() {
         <Heading style={{...title, textAlign: 'center'}}>Delivery Complete · Compartment Latched</Heading>
         <T style={{fontSize: 13, color: S.muted}}>Parcel collected and physical closure confirmed.</T>
         <Button onPress={() => router.push('/')} icon="home-outline">Return to Home Dashboard</Button>
-        <Button onPress={() => router.push('/deliveries')} variant="secondary">View delivery history</Button>
+        <Button onPress={() => router.push('/history')} variant="secondary">View delivery history</Button>
       </Card>}
       <Pressable accessibilityRole="link" accessibilityLabel="Get delivery help" onPress={help}
         style={{minHeight: 48, backgroundColor: S.blue, padding: 14, borderRadius: 12, flexDirection: 'row', gap: 8, alignItems: 'center'}}>

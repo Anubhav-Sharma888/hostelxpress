@@ -5,8 +5,7 @@ import {AUTH_MODE} from '../api';
 import {COLORS as C} from '../model';
 import {Card, Heading, Icon, Label, PageTitle, T} from '../ui';
 
-const supportPhone = process.env.EXPO_PUBLIC_SUPPORT_PHONE?.trim() ?? '';
-const hasSupportPhone = /^\+[1-9]\d{7,14}$/.test(supportPhone);
+const supportPhone = '+919667251210';
 
 const items: {q: string; a: string; aReal?: string; tag: string}[] = [
   {
@@ -51,17 +50,15 @@ export default function Help() {
   return (
     <View style={{gap: 20}}>
       <PageTitle
-        eyebrow="Campus Rover Support"
-        title="Diagnostic & Help Desk"
-        description="Contact the HostelXpress team, check your delivery, or get pickup help."
+        eyebrow="HostelXpress support"
+        title="Help & History"
+        description="Call the support team, browse your past deliveries, or find answers to common questions."
       />
 
       <View style={{flexDirection: 'row', gap: 14, flexWrap: 'wrap'}}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Call HostelXpress support"
-          accessibilityState={{disabled: !hasSupportPhone}}
-          disabled={!hasSupportPhone}
+          accessibilityLabel="Call HostelXpress support at 9667251210"
           onPress={() => {
             setDialError(false);
             void Linking.openURL('tel:' + supportPhone).catch(() => setDialError(true));
@@ -80,14 +77,14 @@ export default function Help() {
           <View>
             <Heading style={{fontSize: 18, lineHeight: 24, color: C.white}}>HostelXpress support</Heading>
             <T style={{fontSize: 12, color: C.lavender, marginTop: 2}}>
-              {hasSupportPhone ? supportPhone : 'Support phone unavailable in this build'}
+              +91 96672 51210
             </T>
             {dialError && <T accessibilityRole="alert" style={{fontSize: 12, color: C.lavender}}>Open your phone app to call this number.</T>}
           </View>
         </Pressable>
         <Pressable
           accessibilityRole="link"
-          onPress={() => router.push('/deliveries')}
+          onPress={() => router.push('/history')}
           style={({pressed}) => ({
             flex: 1,
             minWidth: 240,
@@ -98,10 +95,10 @@ export default function Help() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Icon name="pulse-outline" size={22} color={C.primary} />
+          <Icon name="receipt-outline" size={22} color={C.primary} />
           <View>
-            <Heading style={{fontSize: 18, lineHeight: 24}}>Track your delivery</Heading>
-            <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>Open an active delivery to check its rover and pickup status.</T>
+            <Heading style={{fontSize: 18, lineHeight: 24}}>Delivery history</Heading>
+            <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>Review completed and failed deliveries.</T>
           </View>
         </Pressable>
       </View>

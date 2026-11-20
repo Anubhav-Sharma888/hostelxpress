@@ -51,6 +51,26 @@ def headers(real,**claims):
     return {'Authorization':'Bearer '+real['token'](**claims)}
 
 
+def test_staging_booking_is_idempotent_and_has_no_rover_or_payment(real,database_url):
+    settings=Settings(app_env='production',database_url=database_url,supabase_url='https://example.supabase.co',
+                      worker_enabled=False,trusted_hosts='testserver',staging_booking_user_id=real['user'])
+    with TestClient(create_app(settings)) as client:
+        client.app.state.jwks=StubJwks(SIGNING_KEY.public_key())
+        key=str(uuid4())
+        payload={'destination_hostel_block':'B','parcel_label':'Staging test parcel'}
+        denied=client.post('/v1/orders',headers={**headers(real,sub=str(uuid4())),'Idempotency-Key':key},json=payload)
+        assert denied.status_code==403,denied.text
+        booked=client.post('/v1/orders',headers={**headers(real),'Idempotency-Key':key},json=payload)
+        assert booked.status_code==201,booked.text
+        order=booked.json()
+        assert order['status']=='Pending' and order['is_demo'] is True
+        assert order['bot_id'] is None and order['compartment_id'] is None and order['payment_status'] is None
+        retry=client.post('/v1/orders',headers={**headers(real),'Idempotency-Key':key},json=payload)
+        assert retry.status_code==201 and retry.json()==order
+        assert client.get('/v1/orders',headers=headers(real)).json()=={'items':[order]}
+        assert client.post('/v1/orders/'+order['id']+'/payment',headers=headers(real)).status_code==503
+
+
 def test_real_first_profile_completion_creates_row(real):
     with real['db'].connection() as conn:
         conn.execute('DELETE FROM public.users WHERE id=%s',(real['user'],))

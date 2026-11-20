@@ -7,10 +7,10 @@ import {COLORS as C, isActive} from '../model';
 import {useApp} from '../state';
 import {Icon, T} from '../ui';
 
-const links: {path:'/'|'/tracking'|'/deliveries';label:string;icon:ComponentProps<typeof MaterialCommunityIcons>['name']}[] = [
+const links: {path:'/'|'/deliveries'|'/help';label:string;icon:ComponentProps<typeof MaterialCommunityIcons>['name']}[] = [
   {path:'/',label:'Deliveries',icon:'truck-delivery-outline'},
-  {path:'/tracking',label:'Active Orders',icon:'access-point'},
-  {path:'/deliveries',label:'Help & History',icon:'history'},
+  {path:'/deliveries',label:'Active Orders',icon:'access-point'},
+  {path:'/help',label:'Help & History',icon:'history'},
 ];
 export function Wordmark({light=false,small=false,subtitle='Gate 2 Campus Hub'}:{light?:boolean;small?:boolean;subtitle?:string}) {
   return <View style={{flexDirection:'row',alignItems:'center',gap:8,flexShrink:1}}>
@@ -41,19 +41,24 @@ export function AppShell() {
   const segments = path.split('/').filter(Boolean);
   const shownOrder = segments[0]==='order' && segments[1] ? orders.find(item=>item.id===decodeURIComponent(segments[1])) : undefined;
   const handover = !!shownOrder && ['Arrived','Paid','Completed'].includes(shownOrder.status);
-  const orderTitle = handover ? 'Locker Pin Pickup' : 'Rover Live Tracking';
-  const selected = (target:string) => target==='/'?path==='/':target==='/tracking'?path.startsWith('/order')||path==='/tracking':path==='/deliveries'||path==='/help';
+  const orderTitle = session.mode==='real' && shownOrder?.is_demo ? 'Test booking' : handover ? 'Locker Pin Pickup' : 'Rover Live Tracking';
+  const historyOrder = !!shownOrder && !isActive(shownOrder);
+  const selected = (target:string) => {
+    if (target==='/deliveries') return path==='/deliveries'||(segments[0]==='order'&&!historyOrder);
+    if (target==='/help') return path==='/help'||path==='/history'||historyOrder;
+    return path==='/';
+  };
   function navigate(target:typeof links[number]['path']) {
-    if (target==='/tracking') {
+    if (target==='/deliveries') {
       const order=orders.find(isActive);
       if (order) router.push({pathname:'/order/[id]',params:{id:order.id}});
-      else router.push('/deliveries');
+      else router.push({pathname:'/deliveries',params:{view:'active'}});
     } else router.push(target);
   }
   return <View style={{flex:1,backgroundColor:C.canvas}}>
     <View style={{minHeight:64+insets.top,paddingTop:insets.top,paddingHorizontal:16,backgroundColor:C.canvas,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:4,borderBottomWidth:1,borderBottomColor:'#EEF0F8'}}>
       {segments[0]==='order' ? <View style={{flexDirection:'row',alignItems:'center',gap:2,flexShrink:1}}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to deliveries" onPress={()=>router.push('/deliveries')}
+        <Pressable accessibilityRole="button" accessibilityLabel={historyOrder?'Back to delivery history':'Back to active orders'} onPress={()=>router.push(historyOrder?'/history':{pathname:'/deliveries',params:{view:'active'}})}
           style={{minWidth:48,minHeight:48,alignItems:'center',justifyContent:'center',marginLeft:-10}}>
           <Icon name="arrow-back-outline" size={23} color={C.ink}/>
         </Pressable>

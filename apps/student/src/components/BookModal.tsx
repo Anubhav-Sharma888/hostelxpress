@@ -113,7 +113,7 @@ export function BookModal({onClose,initialHostel}: {onClose:()=>void;initialHost
                 <Label style={{letterSpacing:.4}}>Bay {bay}</Label><Icon name="cube-outline" color={C.muted}/><T style={{fontSize:10,color:C.muted}}>Not assigned</T>
               </View>)}
             </View>
-            <T style={{fontSize:12,lineHeight:18,color:C.muted}}>Your bay is assigned by the server when the booking is confirmed. Availability is checked at that time.</T>
+            <T style={{fontSize:12,lineHeight:18,color:C.muted}}>The server checks availability and assigns a bay for a live delivery.</T>
           </Card>
           <Card style={{padding:16,gap:12}}>
             <Heading style={{fontSize:18,lineHeight:25,letterSpacing:-.3}}>Campus Student Tariff</Heading>
@@ -128,7 +128,7 @@ export function BookModal({onClose,initialHostel}: {onClose:()=>void;initialHost
         </ScrollView>
         <View style={{backgroundColor:C.canvas,padding:16,paddingBottom:16+(mobile?insets.bottom:0),borderTopWidth:1,borderTopColor:C.line,flexDirection:'row',alignItems:'center',gap:12}}>
           <View style={{minWidth:60}}><Label style={{letterSpacing:.4}}>Amount</Label><Heading style={{fontSize:24,lineHeight:30}}>₹10</Heading></View>
-          <View style={{flex:1}}><Button icon="hardware-chip-outline" variant="rust" onPress={()=>void submit()} loading={busy} disabled={!valid} testID="booking-submit" accessibilityLabel="Reserve my compartment">Confirm & Dispatch Rover</Button></View>
+          <View style={{flex:1}}><Button icon="hardware-chip-outline" variant="rust" onPress={()=>void submit()} loading={busy} disabled={!valid} testID="booking-submit">Confirm booking</Button></View>
         </View>
       </View>
     </KeyboardAvoidingView>

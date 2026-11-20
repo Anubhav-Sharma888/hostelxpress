@@ -1,14 +1,14 @@
-name: HostelXpress v1.5.1 Android Staging
+name: HostelXpress v1.5.2 Android Staging
 on:
   push:
-    branches: [qa-release/v1.5.1]
-concurrency: hostelxpress-qa-v1.5.1
+    branches: [qa-release/v1.5.2]
+concurrency: hostelxpress-qa-v1.5.2
 env:
   RELEASE_COMMIT: ${{ github.sha }}
   EXPO_PUBLIC_API_URL: https://hostelxpress-api-staging.onrender.com
   EXPO_PUBLIC_SUPABASE_URL: https://lbyayvpaiewkaptxotkq.supabase.co
   EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_hGuBj4OSgucXFm_A1nCQHg_xJzBhz4V
-  APK_NAME: HostelXpress-v1.5.1-Staging.apk
+  APK_NAME: HostelXpress-v1.5.2-Staging.apk
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -51,24 +51,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          release_dir="$RUNNER_TEMP/hostelxpress-v151"
+          release_dir="$RUNNER_TEMP/hostelxpress-v152"
           mkdir -p "$release_dir"
           cp apps/student/android/app/build/outputs/apk/release/app-release.apk "$release_dir/$APK_NAME"
-          gh release download v1.5.0 --repo "$GITHUB_REPOSITORY" \
-            --pattern 'HostelXpress-v1.5.0-Staging.apk' --dir "$RUNNER_TEMP"
-          printf '%s  %s\n' '6fb996cd3e8ff67a82868ca30623f0158c17634a3ecedcf102c3cf2fe2af08c8' \
-            "$RUNNER_TEMP/HostelXpress-v1.5.0-Staging.apk" | sha256sum -c
+          gh release download v1.5.1 --repo "$GITHUB_REPOSITORY" \
+            --pattern 'HostelXpress-v1.5.1-Staging.apk' --dir "$RUNNER_TEMP"
+          printf '%s  %s\n' '2b5fac6765769852e9b92e5540b24fd918430e98db65d26ebd376667a6924fc4' \
+            "$RUNNER_TEMP/HostelXpress-v1.5.1-Staging.apk" | sha256sum -c
           cd "$release_dir"
           build_tools="$ANDROID_HOME/build-tools/36.0.0"
           signer() {
             "$build_tools/apksigner" verify --print-certs "$1" | awk -F ': ' '/^Signer #1 certificate SHA-256 digest:/ {print $2}'
           }
-          old_cert=$(signer "$RUNNER_TEMP/HostelXpress-v1.5.0-Staging.apk")
+          old_cert=$(signer "$RUNNER_TEMP/HostelXpress-v1.5.1-Staging.apk")
           new_cert=$(signer "$APK_NAME")
           [[ -n "$new_cert" && "$new_cert" == "$old_cert" ]]
           package=$("$build_tools/aapt" dump badging "$APK_NAME" | awk '/^package: / {print}')
           [[ "$package" == *"name='com.anonymous.hostelxpressstudent'"* ]]
-          [[ "$package" == *"versionCode='7'"* && "$package" == *"versionName='1.5.1'"* ]]
+          [[ "$package" == *"versionCode='8'"* && "$package" == *"versionName='1.5.2'"* ]]
           python3 - <<'PY'
           import os
           import zipfile
@@ -77,18 +77,21 @@ jobs:
           assert b"9876543210" not in bundle
           assert b"Skip sign-in for testing" in bundle
           assert b"Preview payment screen" in bundle
+          assert b"+919667251210" in bundle
+          assert b"Delivery history" in bundle
+          assert b"Test booking saved" in bundle
           for name in ("EXPO_PUBLIC_API_URL", "EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"):
               assert os.environ[name].encode() in bundle
           assert b"https://api.hostelxpress.invalid" not in bundle
           PY
           sha256sum "$APK_NAME" > "$APK_NAME.sha256"
           jq -n --arg commit "$RELEASE_COMMIT" --arg certificate_sha256 "$new_cert" \
-            '{version:"1.5.1",versionCode:7,commit:$commit,certificateSha256:$certificate_sha256,qaPreview:true,stagingBackend:true,phoneTested:false}' \
-            > HostelXpress-v1.5.1-Staging-build.json
+            '{version:"1.5.2",versionCode:8,commit:$commit,certificateSha256:$certificate_sha256,qaPreview:true,stagingBackend:true,phoneTested:false}' \
+            > HostelXpress-v1.5.2-Staging-build.json
       - uses: actions/upload-artifact@v4
         with:
-          name: verified-v1.5.1-android-staging
-          path: ${{ runner.temp }}/hostelxpress-v151/*
+          name: verified-v1.5.2-android-staging
+          path: ${{ runner.temp }}/hostelxpress-v152/*
           if-no-files-found: error
           retention-days: 1
   publish:
@@ -99,14 +102,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: verified-v1.5.1-android-staging
+          name: verified-v1.5.2-android-staging
       - name: Publish the verified APK
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           sha256sum -c "$APK_NAME.sha256"
-          gh release create v1.5.1 --repo "$GITHUB_REPOSITORY" --target "$RELEASE_COMMIT" \
-            --title "HostelXpress v1.5.1 Android Staging" --prerelease \
-            --notes "Android staging patch. Sign-in allows up to 75 seconds for the initial profile request while the server starts. Sign in with the designated test account and check that Home and Profile load. Staging access for this account is read-only. Skip sign-in opens the offline preview. Physical-device sign-in has not been verified." \
-            "$APK_NAME" "$APK_NAME.sha256" HostelXpress-v1.5.1-Staging-build.json
+          gh release create v1.5.2 --repo "$GITHUB_REPOSITORY" --target "$RELEASE_COMMIT" \
+            --title "HostelXpress v1.5.2 Android Staging" --prerelease \
+            --notes "Android staging update with the HostelXpress support dialer, a distinct delivery history screen, and clearly labeled staging bookings. Test bookings do not dispatch a rover or take payment." \
+            "$APK_NAME" "$APK_NAME.sha256" HostelXpress-v1.5.2-Staging-build.json
