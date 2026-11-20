@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hostelxpress",
     "slug": "hostelxpress-student",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "orientation": "portrait",
     "icon": "./assets/brand-icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.hostelxpressstudent",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "bundler": "metro",

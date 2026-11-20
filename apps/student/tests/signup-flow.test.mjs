@@ -116,11 +116,11 @@ test('first sign-in after confirmation completes onboarding from saved metadata'
     {full_name: 'QA User', hostel_block: 'Hostel B'},
   );
   assert.deepEqual(user, {id: 'u1', name: 'QA User', hostel_block: 'Hostel B'});
-  assert.equal(http.calls[0].options.method, 'GET');
+  assert.deepEqual(http.calls[0].options, {method: 'GET', timeoutMs: 75_000});
   assert.equal(http.calls[1].options.method, 'PATCH');
   assert.deepEqual(http.calls[1].options.body, {name: 'QA User', hostel_block: 'Hostel B'});
   assert.ok(!('password' in http.calls[1].options.body));
-  assert.equal(http.calls[2].options.method, 'GET');
+  assert.deepEqual(http.calls[2].options, {method: 'GET'});
 });
 
 test('first sign-in with a complete profile sends no PATCH', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@hostelxpress/student",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",

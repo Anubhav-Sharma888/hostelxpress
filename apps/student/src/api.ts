@@ -32,9 +32,11 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = 'ApiError'; }
 }
 
-export async function request<T>(path: string, token?: string, options: {method?: string; body?: unknown; idempotencyKey?: string; headers?: Record<string, string>} = {}): Promise<T> {
+export type RequestOptions = {method?: string; body?: unknown; idempotencyKey?: string; headers?: Record<string, string>; timeoutMs?: number};
+
+export async function request<T>(path: string, token?: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12_000);
   try {
     const response = await fetch(API_URL + path, {
       method: options.method || 'GET',
@@ -49,7 +51,10 @@ export async function request<T>(path: string, token?: string, options: {method?
       signal: controller.signal,
     });
     let body: unknown;
-    try { body = await response.json(); } catch { body = null; }
+    try { body = await response.json(); } catch (error) {
+      if (controller.signal.aborted) throw error;
+      body = null;
+    }
     if (!response.ok) {
       const detail = (body as {detail?: unknown} | null)?.detail;
       const message = typeof detail === 'string' ? detail : response.status === 401 ? 'Your session expired. Please sign in again.' : 'We could not complete this request. Please try again.';
@@ -58,7 +63,9 @@ export async function request<T>(path: string, token?: string, options: {method?
     return body as T;
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    if ((error as Error).name === 'AbortError') throw new ApiError('The server took too long to respond. Please try again.', 0);
+    if (controller.signal.aborted || (error as Error).name === 'AbortError') {
+      throw new ApiError('The server took too long to respond. Please try again.', 0);
+    }
     throw new ApiError('Cannot reach the server. Check your connection and try again.', 0);
   } finally { clearTimeout(timeout); }
 }
