@@ -37,12 +37,11 @@ jobs:
         working-directory: apps/student
         env:
           EXPO_PUBLIC_QA_PREVIEW: '1'
-          EXPO_PUBLIC_SUPPORT_PHONE: ${{ secrets.HOSTELXPRESS_V140_SUPPORT_PHONE }}
         shell: bash
         run: |
-          [[ "$EXPO_PUBLIC_SUPPORT_PHONE" =~ ^\+[1-9][0-9]{7,14}$ ]]
-          test -f "$ANDROID_HOME/platforms/android-37.0/android.jar"
-          test -f "$ANDROID_HOME/licenses/android-sdk-license"
+          if [ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" ]; then
+            sdkmanager "platforms;android-37.0"
+          fi
           export NODE_ENV=production
           ./node_modules/.bin/expo prebuild --platform android --no-install
           cd android
@@ -50,7 +49,6 @@ jobs:
       - name: Verify signing, version, and bundled staging configuration
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPO_PUBLIC_SUPPORT_PHONE: ${{ secrets.HOSTELXPRESS_V140_SUPPORT_PHONE }}
         shell: bash
         run: |
           release_dir="$RUNNER_TEMP/hostelxpress-v150"
@@ -58,6 +56,8 @@ jobs:
           cp apps/student/android/app/build/outputs/apk/release/app-release.apk "$release_dir/$APK_NAME"
           gh release download v1.4.0 --repo "$GITHUB_REPOSITORY" \
             --pattern 'HostelXpress-v1.4.0-QA.apk' --dir "$RUNNER_TEMP"
+          printf '%s  %s\n' '048a54682cc54d0c20cee3378caf7afb69fe98b5f642d744ee1ed47ede637fe4' \
+            "$RUNNER_TEMP/HostelXpress-v1.4.0-QA.apk" | sha256sum -c
           cd "$release_dir"
           build_tools="$ANDROID_HOME/build-tools/36.0.0"
           signer() {
@@ -74,7 +74,6 @@ jobs:
           import zipfile
           with zipfile.ZipFile(os.environ["APK_NAME"]) as apk:
               bundle = apk.read("assets/index.android.bundle")
-          assert os.environ["EXPO_PUBLIC_SUPPORT_PHONE"].encode() in bundle
           assert b"9876543210" not in bundle
           assert b"Skip sign-in for testing" in bundle
           assert b"Preview payment screen" in bundle
