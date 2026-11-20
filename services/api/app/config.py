@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     mqtt_ca_file: str | None = None
     worker_enabled: bool = True
     staging_booking_user_id: UUID | None = None
+    rider_otp_secret: str = ''  # Backend only, separate from JWT/merchant keys
+    gate_operator_token: str = ''  # Backend-only Gate 2 operator credential
     trusted_hosts: str = 'localhost,127.0.0.1,[::1],testserver'
 
     @model_validator(mode='after')
@@ -51,6 +53,13 @@ class Settings(BaseSettings):
                 raise ValueError('Production requires an HTTPS SUPABASE_URL')
         if self.mqtt_host and (not self.mqtt_username or not self.mqtt_password or not self.mqtt_ingest_username or not self.mqtt_ingest_password):
             raise ValueError('MQTT requires backend credentials; anonymous connections are disabled')
+        if bool(self.rider_otp_secret) != bool(self.gate_operator_token):
+            raise ValueError('Rider OTP needs both an OTP secret and a gate operator token')
+        if self.rider_otp_enabled and (len(self.rider_otp_secret.encode('utf-8')) < 32
+                                       or len(self.gate_operator_token) < 32):
+            raise ValueError('Rider OTP credentials must each have at least 32 bytes/characters')
+        if self.rider_otp_enabled and (self.is_demo or self.staging_booking_user_id):
+            raise ValueError('Rider OTP cannot run in demo or read-limited staging mode')
         if self.staging_booking_user_id and (
             self.is_demo or self.worker_enabled or self.mqtt_host or self.razorpay_key_id
             or self.razorpay_key_secret or self.razorpay_webhook_secret
@@ -61,6 +70,10 @@ class Settings(BaseSettings):
     @property
     def is_demo(self) -> bool:
         return self.app_env in {'demo','test'}
+
+    @property
+    def rider_otp_enabled(self) -> bool:
+        return bool(self.rider_otp_secret and self.gate_operator_token)
 
     @property
     def razorpay_configured(self) -> bool:

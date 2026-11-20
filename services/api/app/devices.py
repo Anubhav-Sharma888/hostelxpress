@@ -9,10 +9,12 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException,Request
+from pydantic import ValidationError
 from jsonschema import Draft202012Validator,FormatChecker
 from psycopg.types.json import Jsonb
 
-from . import service
+from . import service,rider_otp_store
+from .models import RiderOtpAttempt
 
 SCHEMA=json.loads((Path(__file__).resolve().parents[3]/'contracts/mqtt/wire.schema.json').read_text())
 VALIDATOR=Draft202012Validator(SCHEMA,format_checker=FormatChecker())
@@ -207,6 +209,36 @@ def ingest(conn,bot_id,raw,*,via_mqtt=False):
 
 
 def install_routes(app):
+    @app.post('/v1/devices/{bot_id}/rider-otp')
+    async def redeem_rider_otp(bot_id:UUID,request:Request):
+        settings=request.app.state.settings
+        if not settings.rider_otp_enabled:
+            raise HTTPException(404,'Rider OTP is not configured')
+        raw=await request.body()
+        if len(raw)>512:
+            raise HTTPException(413,'Rider OTP submission is too large')
+        def apply():
+            with request.app.state.db.connection() as conn:
+                try:
+                    verify_http(conn,bot_id,raw,request.headers.get('X-Device-Timestamp'),
+                                request.headers.get('X-Device-Signature'),request.url.path)
+                except HTTPException as exc:
+                    if exc.status_code==401:
+                        request.app.state.device_throttle.check(request.client.host if request.client else '')
+                    raise
+                try:
+                    submission=RiderOtpAttempt.model_validate_json(raw)
+                except ValidationError:
+                    raise HTTPException(422,'Invalid rider OTP submission') from None
+                return rider_otp_store.redeem_challenge(
+                    conn,submission.order_id,bot_id,submission.compartment,
+                    submission.code,settings.rider_otp_secret.encode())
+        result=await asyncio.to_thread(apply)
+        if not result['accepted']:
+            # Invalid attempts are committed BEFORE sending this response.
+            raise HTTPException(403,'Rider OTP invalid, expired, locked, or previously used')
+        return result
+
     @app.post('/v1/devices/{bot_id}/messages')
     async def messages(bot_id:UUID,request:Request):
         if request.app.state.settings.is_demo:
