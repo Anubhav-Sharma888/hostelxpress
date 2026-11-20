@@ -81,7 +81,7 @@ def ensure_demo(conn):
         conn.execute('INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,true,now()) ON CONFLICT DO NOTHING',(DEMO_BOT_ID,compartment))
 
 
-def book(conn, user_id, booking, key, is_demo):
+def book(conn, user_id, booking, key, is_demo, *, staging=False):
     fingerprint = hashlib.sha256(json.dumps(booking.model_dump(),sort_keys=True,separators=(',',':')).encode()).hexdigest()
     advisory = int.from_bytes(hashlib.sha256((str(user_id)+str(key)).encode()).digest()[:8],'big',signed=True)
     conn.execute('SELECT pg_advisory_xact_lock(%s)',(advisory,))
@@ -91,6 +91,14 @@ def book(conn, user_id, booking, key, is_demo):
             raise HTTPException(409,'This Idempotency-Key was already used for different booking details')
         return serialize_order(conn,existing)
     get_profile(conn,user_id)
+    if staging:
+        # Mark staging rows as demo so the live allocation query can never take them.
+        order = conn.execute(
+            'INSERT INTO public.orders(user_id,destination_hostel_block,parcel_label,idempotency_key,request_fingerprint,is_demo) VALUES(%s,%s,%s,%s,%s,true) RETURNING *',
+            (user_id,booking.destination_hostel_block,booking.parcel_label,key,fingerprint),
+        ).fetchone()
+        event(conn,order['id'],'Pending','Test booking saved in staging; no rover is assigned')
+        return serialize_order(conn,order)
     if is_demo:
         # An explicit local simulator operation produces a synthetic heartbeat.
         conn.execute('UPDATE public.bots SET last_seen_at=now() WHERE is_demo=true')

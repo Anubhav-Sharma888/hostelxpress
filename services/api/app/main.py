@@ -123,7 +123,8 @@ def create_app(settings:Settings | None=None) -> FastAPI:
     def health(request:Request):
         with request.app.state.db.connection() as conn:
             conn.execute('SELECT 1')
-        return {'status':'ok','mode':'demo' if settings.is_demo else 'production','database':'ready',
+        mode = 'staging' if settings.staging_booking_user_id else 'demo' if settings.is_demo else 'production'
+        return {'status':'ok','mode':mode,'database':'ready',
                 'integrations':{'payments':'demo' if settings.is_demo else ('configured' if settings.razorpay_configured else 'disabled'),
                                 'mqtt':'configured' if settings.mqtt_host and not settings.is_demo else 'disabled'}}
 
@@ -169,8 +170,11 @@ def create_app(settings:Settings | None=None) -> FastAPI:
 
     @app.post('/v1/orders',status_code=201)
     def book(body:Booking,request:Request,idempotency_key:UUID=Header(alias='Idempotency-Key'),user:Principal=Depends(current_user)):
+        staging_user = settings.staging_booking_user_id
+        if staging_user and user.id != staging_user:
+            raise HTTPException(403,'Staging booking is available only to the test account')
         with request.app.state.db.connection() as conn:
-            return service.book(conn,user.id,body,idempotency_key,user.is_demo)
+            return service.book(conn,user.id,body,idempotency_key,user.is_demo,staging=staging_user is not None)
 
     @app.get('/v1/orders/{order_id}')
     def order(order_id:UUID,request:Request,user:Principal=Depends(current_user)):

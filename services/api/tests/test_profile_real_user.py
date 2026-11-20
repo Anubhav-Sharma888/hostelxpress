@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime,timedelta,timezone
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -9,10 +10,13 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
+from psycopg.errors import InsufficientPrivilege
 from psycopg.types.json import Jsonb
 
 from app.config import Settings
 from app.main import create_app
+from app.models import Booking
+from app.service import book
 
 # Real-mode Supabase Auth verification uses ES256/RS256 JWKS. The suite mints a
 # local ES256 key and swaps app.state.jwks for a stub, so token verification
@@ -49,6 +53,53 @@ def real(db,database_url):
 
 def headers(real,**claims):
     return {'Authorization':'Bearer '+real['token'](**claims)}
+
+
+def test_staging_booking_is_idempotent_and_has_no_rover_or_payment(real,database_url):
+    settings=Settings(app_env='production',database_url=database_url,supabase_url='https://example.supabase.co',
+                      worker_enabled=False,trusted_hosts='testserver',staging_booking_user_id=real['user'])
+    with TestClient(create_app(settings)) as client:
+        client.app.state.jwks=StubJwks(SIGNING_KEY.public_key())
+        key=str(uuid4())
+        payload={'destination_hostel_block':'B','parcel_label':'Staging test parcel'}
+        denied=client.post('/v1/orders',headers={**headers(real,sub=str(uuid4())),'Idempotency-Key':key},json=payload)
+        assert denied.status_code==403,denied.text
+        booked=client.post('/v1/orders',headers={**headers(real),'Idempotency-Key':key},json=payload)
+        assert booked.status_code==201,booked.text
+        order=booked.json()
+        assert order['status']=='Pending' and order['is_demo'] is True
+        assert order['bot_id'] is None and order['compartment_id'] is None and order['payment_status'] is None
+        retry=client.post('/v1/orders',headers={**headers(real),'Idempotency-Key':key},json=payload)
+        assert retry.status_code==201 and retry.json()==order
+        assert client.get('/v1/orders',headers=headers(real)).json()=={'items':[order]}
+        assert client.post('/v1/orders/'+order['id']+'/payment',headers=headers(real)).status_code==503
+
+
+def test_staging_database_role_can_only_create_unassigned_test_orders(real):
+    with real['db'].connection() as conn:
+        conn.execute('CREATE ROLE hostelxpress_health NOLOGIN NOINHERIT NOBYPASSRLS')
+        conn.execute('GRANT USAGE ON SCHEMA public, hostelxpress_private TO hostelxpress_health')
+        conn.execute('GRANT SELECT (id, name, hostel_block) ON public.users TO hostelxpress_health')
+        conn.execute('GRANT SELECT ON public.orders TO hostelxpress_health')
+        conn.execute('CREATE POLICY test_profile_read ON public.users FOR SELECT TO hostelxpress_health USING (true)')
+        conn.execute('CREATE POLICY test_order_read ON public.orders FOR SELECT TO hostelxpress_health USING (true)')
+        permissions=Path(__file__).resolve().parents[3]/'supabase/staging/booking_permissions.sql'
+        conn.execute(permissions.read_text())
+        conn.execute('INSERT INTO hostelxpress_private.staging_booking_accounts VALUES (%s)',(real['user'],))
+        other=uuid4()
+        conn.execute('INSERT INTO auth.users (id) VALUES (%s)',(other,))
+        conn.execute('SET LOCAL ROLE hostelxpress_health')
+        order=book(conn,real['user'],Booking(destination_hostel_block='B',parcel_label='Test parcel'),uuid4(),False,staging=True)
+        assert order['status']=='Pending' and order['bot_id'] is None and order['payment_status'] is None
+        assert order['timeline'][0]['status']=='Pending'
+        for account,is_demo in ((other,True),(real['user'],False)):
+            with pytest.raises(InsufficientPrivilege),conn.transaction():
+                conn.execute("INSERT INTO public.orders(user_id,destination_hostel_block,is_demo) VALUES(%s,'B',%s)",(account,is_demo))
+        with pytest.raises(InsufficientPrivilege),conn.transaction():
+            conn.execute('UPDATE public.orders SET compartment_id=1 WHERE id=%s',(order['id'],))
+        with pytest.raises(InsufficientPrivilege),conn.transaction():
+            conn.execute('INSERT INTO public.transactions(order_id) VALUES(%s)',(order['id'],))
+        conn.rollback()
 
 
 def test_real_first_profile_completion_creates_row(real):

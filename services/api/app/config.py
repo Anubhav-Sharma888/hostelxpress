@@ -4,6 +4,7 @@ import ipaddress
 import secrets
 from functools import lru_cache
 from urllib.parse import urlparse
+from uuid import UUID
 
 from psycopg.conninfo import conninfo_to_dict
 from pydantic import Field, model_validator
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     mqtt_ingest_client_id: str = 'hostelxpress-backend-ingest'
     mqtt_ca_file: str | None = None
     worker_enabled: bool = True
+    staging_booking_user_id: UUID | None = None
     trusted_hosts: str = 'localhost,127.0.0.1,[::1],testserver'
 
     @model_validator(mode='after')
@@ -49,6 +51,11 @@ class Settings(BaseSettings):
                 raise ValueError('Production requires an HTTPS SUPABASE_URL')
         if self.mqtt_host and (not self.mqtt_username or not self.mqtt_password or not self.mqtt_ingest_username or not self.mqtt_ingest_password):
             raise ValueError('MQTT requires backend credentials; anonymous connections are disabled')
+        if self.staging_booking_user_id and (
+            self.is_demo or self.worker_enabled or self.mqtt_host or self.razorpay_key_id
+            or self.razorpay_key_secret or self.razorpay_webhook_secret
+        ):
+            raise ValueError('Staging bookings require Supabase Auth, with worker, MQTT and payments disabled')
         return self
 
     @property
