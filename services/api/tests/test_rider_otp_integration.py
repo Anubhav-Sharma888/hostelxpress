@@ -75,8 +75,8 @@ def test_operator_auth_secret_storage_and_client_denial(gate):
                          (gate['order'],)).fetchone()
         assert code not in str(row) and row['attempts']==0
         for role in ('anon','authenticated'):
-            assert conn.execute("SELECT has_table_privilege(%s,'hostelxpress_private.rider_otp_challenges','SELECT')",
-                                (role,)).fetchone()[0] is False
+            assert conn.execute("SELECT has_table_privilege(%s,'hostelxpress_private.rider_otp_challenges','SELECT') AS permitted",
+                                (role,)).fetchone()['permitted'] is False
 
 
 def test_correct_signed_code_is_single_use_and_only_queues_command(gate):
@@ -90,8 +90,8 @@ def test_correct_signed_code_is_single_use_and_only_queues_command(gate):
                          (gate['order'],)).fetchone()
         assert cmd['command']=='unlock_outer' and cmd['status']=='pending'
         assert cmd['attempts']==0 and cmd['compartment']==2 and cmd['bot_id']==gate['bot']
-        assert conn.execute('SELECT count(*) FROM hostelxpress_private.command_outbox WHERE order_id=%s',
-                            (gate['order'],)).fetchone()[0]==1
+        assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s',
+                            (gate['order'],)).fetchone()['n']==1
         challenge=conn.execute('SELECT attempts,consumed_at FROM hostelxpress_private.rider_otp_challenges '
                                'WHERE order_id=%s',(gate['order'],)).fetchone()
         assert challenge['attempts']==1 and challenge['consumed_at'] is not None
@@ -109,8 +109,8 @@ def test_three_wrong_attempts_persist_despite_error_status(gate):
                                 (gate['order'],)).fetchone()['attempts']==n
     assert submit(gate,code).status_code==403
     with gate['db'].connection() as conn:
-        assert conn.execute('SELECT count(*) FROM hostelxpress_private.command_outbox WHERE order_id=%s',
-                            (gate['order'],)).fetchone()[0]==0
+        assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s',
+                            (gate['order'],)).fetchone()['n']==0
 
 
 def test_bad_device_signature_cannot_guess(gate):
@@ -148,8 +148,8 @@ def test_expired_code_cannot_queue_command(gate):
                      "WHERE order_id=%s",(gate['order'],))
     assert submit(gate,code).status_code==403
     with gate['db'].connection() as conn:
-        assert conn.execute('SELECT count(*) FROM hostelxpress_private.command_outbox WHERE order_id=%s',
-                            (gate['order'],)).fetchone()[0]==0
+        assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s',
+                            (gate['order'],)).fetchone()['n']==0
 
 
 def test_invalid_configuration_never_enables_rider_otp(database_url):
