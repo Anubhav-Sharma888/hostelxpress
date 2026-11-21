@@ -33,8 +33,7 @@ class PickupOtpAttempt(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     order_id: UUID
     compartment: int = Field(ge=1,le=3)
-    code: str = Field(min_length=6,max_length=6,pattern=r'^[0-9]{6}
-)
+    code: str = Field(min_length=6,max_length=6,pattern=r'^[0-9]{6}\z')
 
 
 class CourierCodeRequest(BaseModel):
@@ -46,5 +45,4 @@ class CourierCodeRequest(BaseModel):
 class CourierCodeSubmission(BaseModel):
     # OTP1: from the courier, student forwards to display; not a verified code.
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
-    code: str = Field(min_length=4,max_length=8,pattern=r'^[0-9]{4,8}
-)
+    code: str = Field(min_length=4,max_length=8,pattern=r'^[0-9]{4,8}\z')
