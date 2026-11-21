@@ -5,6 +5,7 @@ import hmac
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
@@ -54,12 +55,28 @@ class RazorpayProvider:
         return isinstance(items,list) and any(isinstance(item,dict) and item.get('id')==payment_id for item in items)
 
 
+
+def safe_qr_image_url(url):
+    if not isinstance(url,str) or not url.startswith('https://'):
+        return False
+    try:
+        parsed=urlsplit(url)
+    except ValueError:
+        return False
+    return bool(parsed.hostname and not parsed.username and not parsed.password and
+                not parsed.fragment and not any(char.isspace() for char in url))
+
+
 def response(payment):
     is_demo = payment['is_demo']
     state = ('refunded' if payment['status']=='Refunded' else
              'paid' if payment['status']=='Captured' else
              'failed' if payment['status']=='Failed' else
              'reconciling' if payment['status']=='Authorized' or payment['provider_state']!='ready' else 'pending')
+    if state=='pending' and not is_demo and not safe_qr_image_url(payment.get('qr_image_url')):
+        # If provider creation succeeded but the app cannot display a usable
+        # QR, never imply that an unpayable icon is a live payment QR.
+        state='reconciling'
     show_qr = (state=='pending' and not is_demo and
                (payment['expires_at'] is None or payment['expires_at']>service.now()))
     return {'order_id':payment['order_id'],'qr_id':payment['razorpay_qr_id'],
@@ -145,8 +162,8 @@ def create_payment(db, provider, order_id, user_id, is_demo):
             raise HTTPException(502,'Provider QR expiry does not match the payment intent')
         expires_at=actual_expiry
         url=qr.get('image_url')
-        if url is not None and (not isinstance(url,str) or not url.startswith('https://')):
-            raise HTTPException(502,'Provider QR image URL must use HTTPS')
+        if not safe_qr_image_url(url):
+            raise HTTPException(502,'Provider did not supply a usable HTTPS QR image')
     with db.connection() as conn:
         service.lock_order(conn,order_id,user_id)
         payment = conn.execute("UPDATE public.transactions SET razorpay_qr_id=%s,qr_image_url=%s,expires_at=%s,provider_state='ready' WHERE request_id=%s AND provider_state='creating' RETURNING *",(qr['id'],qr.get('image_url'),expires_at,request_id)).fetchone()

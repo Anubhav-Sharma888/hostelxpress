@@ -98,6 +98,11 @@ def test_create_fixed_price_single_use_qr_once_and_preserve_actual_provider_expi
     {'close_by':'bad-timestamp'},
     {'close_by':2147483647},
     {'image_url':'http://insecure.example/qr.png'},
+    {'image_url':None},
+    {'image_url':''},
+    {'image_url':'https://'},
+    {'image_url':'https://user:pass@images.example/qrcode.png'},
+    {'image_url':'https://images.example/qr.png#fragment'},
     {'image_url':[]},
 ])
 def test_malformed_provider_qr_fails_closed_without_issuing_second_qr(payment_api,bad_response):
@@ -296,4 +301,17 @@ def test_captured_paid_order_retains_receipt_without_payment_qr(payment_api):
         assert result.status_code==200,result.text
         assert result.json()['status']=='paid'
         assert result.json()['qr_image_url'] is None
+    assert env['provider'].calls==1
+
+
+def test_missing_saved_qr_image_is_not_presented_as_payable(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute('UPDATE public.transactions SET qr_image_url=NULL '
+                     'WHERE order_id=%s',(env['order'],))
+    response=read_payment(env)
+    assert response.status_code==200,response.text
+    assert response.json()['status']=='reconciling'
+    assert response.json()['qr_image_url'] is None
     assert env['provider'].calls==1
