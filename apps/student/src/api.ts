@@ -17,7 +17,7 @@ export type DemoAction = 'load' | 'dispatch' | 'arrive' | 'pay' | 'close_lid';
 export type AuthedSession = { mode: 'real' | 'demo'; access_token: string; token_type: string; expires_in: number; user: User };
 export type PreviewSession = { mode: 'qa-preview'; user: User };
 export type Session = AuthedSession | PreviewSession;
-export type Payment = { order_id: string; amount: number; currency: string; provider: 'demo' | 'razorpay'; status: 'pending' | 'paid' | 'refunded'; qr_image_url: string | null; qr_payload: string | null; expires_at: string | null };
+export type Payment = { order_id: string; amount: number; currency: string; provider: 'demo' | 'razorpay'; status: 'pending' | 'paid' | 'refunded' | 'failed' | 'reconciling'; qr_image_url: string | null; qr_payload: string | null; expires_at: string | null };
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;

@@ -1,8 +1,8 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Image, Pressable, View} from 'react-native';
 import {router, useLocalSearchParams} from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import {Order, Payment, request} from '../../api';
+import {ApiError, Order, Payment, request} from '../../api';
 import {hostelName} from '../../campus';
 import {CampusMap} from '../../components/CampusMap';
 import {FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
@@ -36,6 +36,25 @@ function DeliveryContent() {
   const now = useClock();
   const qa = session?.mode === 'qa-preview';
   const demo = session?.mode === 'demo';
+  const paymentToken = session && session.mode !== 'qa-preview' ? session.access_token : undefined;
+  const paymentOrderId = storedOrder?.id;
+  const paymentOrderStatus = storedOrder?.status;
+  // Rehydrate a saved payment after screen reopen without creating another QR.
+  // The server returns 404 before first payment; that is an expected state.
+  useEffect(() => {
+    if (!paymentToken || !paymentOrderId ||
+        !['Arrived', 'Paid'].includes(paymentOrderStatus || '')) return;
+    let active = true;
+    void request<Payment>('/v1/orders/' + encodeURIComponent(paymentOrderId) + '/payment',
+      paymentToken, {timeoutMs: 75000}).then(result => {
+        if (active) setPayment(result);
+      }).catch(err => {
+        if (active && !(err instanceof ApiError && err.status === 404)) {
+          setError((err as Error).message);
+        }
+      });
+    return () => { active = false; };
+  }, [paymentToken, paymentOrderId, paymentOrderStatus]);
 
   if (!storedOrder) {
     return loading ? <Loading /> : <View style={{gap: 16}}>
@@ -62,6 +81,9 @@ function DeliveryContent() {
   const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
   const alreadyPaid = payment?.status === 'paid';
   const refunded = payment?.status === 'refunded';
+  const paymentFailed = payment?.status === 'failed';
+  const reconciling = payment?.status === 'reconciling';
+  const needsReview = expired || refunded || paymentFailed || reconciling;
   const next = nextDemoAction(order.status);
   const roverPosition = session?.mode === 'real' ? freshRoverPosition(order.bot, now) : null;
   const destination = hostelName(order.destination_hostel_block);
@@ -148,7 +170,7 @@ function DeliveryContent() {
           <Icon name="card-outline" color={S.muted} />
           <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>Debit / Campus Card</T><T style={{fontSize: 12, color: S.muted}}>Not available in this release</T></View>
         </View>
-        {payment && !alreadyPaid && !refunded && !expired && <View style={{gap: 12, alignItems: 'center'}}>
+        {payment && !alreadyPaid && !needsReview && <View style={{gap: 12, alignItems: 'center'}}>
           <Label>{payment.provider === 'demo' ? 'Nonpayable demo QR' : 'Secure payment QR'}</Label>
           <View style={{padding: 16, backgroundColor: S.white}}>
             {payment.provider === 'demo' && payment.qr_payload && !/^upi:/i.test(payment.qr_payload)
@@ -172,13 +194,22 @@ function DeliveryContent() {
         {refunded && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
           This payment was refunded. Do not pay again until HostelXpress support reviews your order.
         </T>}
+        {paymentFailed && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          The payment attempt failed. Ask support to review the booking before paying again.
+        </T>}
+        {reconciling && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          The provider has not confirmed whether a payment QR was created. Do not retry a charge; contact support.
+        </T>}
         {alreadyPaid && <T accessibilityRole="alert" style={{fontSize: 13, color: S.teal}}>
           Payment is verified. Waiting for the order and rover state to update. Do not pay again.
         </T>}
-        <Button onPress={expired || refunded ? help : () => void preparePayment()} loading={busy}
-          disabled={qa || alreadyPaid} icon={expired || refunded ? 'headset-outline' : 'flash-outline'} testID="payment-create"
-          accessibilityLabel={expired || refunded ? 'Contact HostelXpress support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
-          {expired ? 'QR expired · Contact Support' : refunded ? 'Refunded · Contact Support' : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
+        <Button onPress={needsReview ? help : () => void preparePayment()} loading={busy}
+          disabled={qa || alreadyPaid} icon={needsReview ? 'headset-outline' : 'flash-outline'} testID="payment-create"
+          accessibilityLabel={needsReview ? 'Contact HostelXpress support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
+          {refunded ? 'Refunded · Contact Support' : paymentFailed ? 'Failed · Contact Support'
+            : reconciling ? 'QR status unclear · Contact Support'
+            : expired ? 'QR expired · Contact Support'
+            : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
         </Button>
         {qa && <T style={{fontSize: 12, color: S.muted}}>Offline sample · Payments require the connected backend.</T>}
       </Card>}
