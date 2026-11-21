@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import queue
+import re
 import sqlite3
 import ssl
 import threading
@@ -184,12 +185,10 @@ class HostelxpressLink:
         if len(_json(payload)) > 16384:
             raise ValueError("Payload exceeds 16 KiB")
 
-    def _http(self, payload: dict) -> dict:
-        if self._http_sender:
-            return self._http_sender(payload)
+    def _post_signed(self, path: str, payload: dict) -> dict:
+        """Send one request to a fixed internal path; never follow redirects."""
         if not self.api_url or not self.device_secret:
-            raise ConnectionError("Critical events remain queued until device HTTP ingestion is configured")
-        path = f"/v1/devices/{self.bot_id}/messages"
+            raise ConnectionError("Provisioned HTTPS origin and bot signing secret are required")
         raw, timestamp = _json(payload), str(int(time.time()))
         signature = hmac.new(self.device_secret.encode(), f"{timestamp}.POST.{path}.".encode() + raw, hashlib.sha256).hexdigest()
         request = Request(self.api_url + path, data=raw, method="POST", headers={
@@ -198,6 +197,38 @@ class HostelxpressLink:
         })
         with build_opener(_NoRedirect()).open(request, timeout=5) as response:
             return json.loads(response.read(65537))
+
+    def _http(self, payload: dict) -> dict:
+        if self._http_sender:
+            return self._http_sender(payload)
+        if not self.api_url or not self.device_secret:
+            raise ConnectionError("Critical events remain queued until device HTTP ingestion is configured")
+        return self._post_signed(f"/v1/devices/{self.bot_id}/messages", payload)
+
+    def submit_rider_otp(self, order_id: str, compartment: int, code: str) -> dict:
+        """Ask the server to verify a Gate 2 rider code; NEVER actuate a lid.
+
+        This attempt is not a durable event: a lost response may mean that the
+        OTP was already consumed and a command queued. The operator must
+        reconcile before retrying; the connector cannot generate new codes.
+        """
+        order_id = _uuid(order_id)
+        if type(compartment) is not int or not 1 <= compartment <= 3:
+            raise ValueError("Assigned compartment 1-3 is required")
+        if type(code) is not str or re.fullmatch(r"[0-9]{6}", code, re.ASCII) is None:
+            raise ValueError("The rider OTP must contain exactly six ASCII digits")
+        if self.clock_synchronized is None or self.clock_synchronized() is not True:
+            raise ValueError("A synchronized device clock is required for rider OTP submission")
+        result = self._post_signed(f"/v1/devices/{self.bot_id}/rider-otp", {
+            "order_id": order_id, "compartment": compartment, "code": code,
+        })
+        if not isinstance(result, dict) or result.get("accepted") is not True or result.get("status") != "queued_not_executed":
+            raise ConnectionError("Server did not confirm rider OTP authorization")
+        try:
+            command_id = _uuid(result["command_id"])
+        except (KeyError, ValueError, TypeError):
+            raise ConnectionError("Server returned an invalid queued command identity") from None
+        return {"accepted": True, "command_id": command_id, "status": "queued_not_executed"}
 
     def _queue(self, payload: dict) -> None:
         self._validate(payload)

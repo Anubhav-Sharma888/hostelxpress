@@ -80,3 +80,29 @@ Everything is local and synthetic. Passing this harness still does not establish
 ## Delayed observations that require reconciliation
 
 A backend receipt can confirm durable storage while setting `reconciliation_required:true`, for example when an event arrived too late to establish a safe state transition. The connector removes the transport queue item but persistently exposes it in `link.pending_reconciliations`, including the original payload and receipt. An optional `on_reconciliation` callback can alert the team's operator interface. Monitor this list after restart as well as `pending_events`. `acknowledge_reconciliation(message_id)` only marks the local alert handled; it cannot change an order or authorize another physical action. Never interpret a stored observation as a successful unlock or silently replay an expired command.
+
+
+### Gate 2 rider OTP submission (HostelXpress-owned codes)
+
+The backend's opt-in rider OTP flow issues a six-digit code to an authenticated
+Gate 2 operator. Only the assigned, provisioned rover may submit that code to
+the backend. To connect the rover-side keypad/code-entry component, call:
+
+\`\`\`python
+receipt = link.submit_rider_otp(order_id, compartment, "003721")
+# "queued_not_executed" means only that the server queued a short-lived command.
+# Await the actual signed MQTT unlock_outer command and local safety guard.
+\`\`\`
+
+The connector signs the exact JSON bytes with the bot's HTTP HMAC credential,
+requires a synchronized clock and HTTPS (or explicit loopback test transport),
+and rejects invalid code shapes before sending. It never stores the code in
+the SQLite event ledger, attempts SMS delivery, invokes the actuator, or
+interprets an HTTP response as physical opening.
+
+A failed network response can be ambiguous: the server might have consumed
+the code and queued the command before the client saw the response. **Do not
+blindly retry or issue another code**. Reconcile the command outbox and
+physical lid state with the operator. Third-party courier-platform OTPs are
+not validated by HostelXpress without a separate approved provider link.
+This opt-in feature is not enabled in the current restricted staging APK/API.
