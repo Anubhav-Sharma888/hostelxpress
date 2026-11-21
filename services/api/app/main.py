@@ -76,7 +76,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             if not migrated:
                 raise RuntimeError('Apply all application migrations before starting the API')
             if settings.pickup_otp_enabled:
-                has_otp_schema=conn.execute("SELECT 1 FROM hostelxpress_private.schema_migrations WHERE version='0005_pickup_and_courier'").fetchone()
+                has_otp_schema=conn.execute("SELECT 1 FROM hostelxpress_private.schema_migrations WHERE version='0004_pickup_and_courier'").fetchone()
                 if not has_otp_schema:
                     raise RuntimeError('Apply OTP2 and courier relay migration before enabling delivery codes')
             if settings.is_demo:

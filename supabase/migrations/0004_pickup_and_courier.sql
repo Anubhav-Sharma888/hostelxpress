@@ -1,4 +1,4 @@
--- PRIVATE delivery codes. Requires 0001-0004; apply only to an approved
+-- PRIVATE delivery codes. Requires 0001-0003; apply only to an approved
 -- non-staging environment. OTP1 is courier display ONLY; OTP2 is student pickup.
 begin;
 create table hostelxpress_private.pickup_otp_challenges (
@@ -41,5 +41,5 @@ revoke all on hostelxpress_private.courier_code_messages from public,anon,authen
 grant select,insert,update on hostelxpress_private.courier_code_messages to service_role;
 comment on table hostelxpress_private.courier_code_messages is
  'OTP1: encrypted courier-platform code shown once to assigned rover; never validates courier OTP or authorizes unlock.';
-insert into hostelxpress_private.schema_migrations(version) values ('0005_pickup_and_courier');
+insert into hostelxpress_private.schema_migrations(version) values ('0004_pickup_and_courier');
 commit;
