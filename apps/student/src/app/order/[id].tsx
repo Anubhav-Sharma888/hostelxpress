@@ -78,7 +78,7 @@ function DeliveryContent() {
   const unlocked = order.status === 'Paid' && order.bot?.status === 'UNLOCKED' && !stale;
   const handover = ['Arrived', 'Paid', 'Completed'].includes(order.status);
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
-  const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
+  const expired = payment?.status === 'pending' && payment.expires_at ? Date.parse(payment.expires_at) <= now : false;
   const alreadyPaid = payment?.status === 'paid';
   const refunded = payment?.status === 'refunded';
   const paymentFailed = payment?.status === 'failed';

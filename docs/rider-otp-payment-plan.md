@@ -71,3 +71,18 @@ Secure operator experience and code delivery, provider OTP integration if
 external courier-issued codes are required, auditing/rotation/reconciliation,
 real enrolled rover plus MQTT ACLs, Razorpay sandbox QR/webhook acceptance,
 and Android test UI. Keep physical rover implementation with robotics team.
+
+
+## Payment-state recovery after app restart
+
+An authenticated student can now GET /v1/orders/{order_id}/payment.
+This endpoint is **read only**: it checks ownership and returns 404 if no
+payment attempt exists, without requesting a new QR or calling Razorpay.
+A saved pending QR is restored when reopening an Arrived delivery; creation
+uncertainty is explicitly 'reconciling' with no payable QR; failed and
+refunded attempts never display a QR. Only pending QR codes can expire in
+the mobile presentation: a previously captured payment cannot revert to
+'QR expired'. The student contacts support for expired or uncertain cases;
+retrying a QR after a lost network response is deliberately prohibited.
+The active staging API remains unchanged and its test-only payment route is
+disabled without broadening Supabase access.
