@@ -274,7 +274,7 @@ function DeliveryContent() {
         <Button variant="secondary" icon="headset-outline" onPress={help}>Get Help</Button>
       </Card>}
 
-      {order.status === 'Paid' && !unlocked && <Card style={{...card, backgroundColor: S.pale}} testID="pickup-otp2-card">
+      {order.status === 'Paid' && !unlocked && <Card style={{...card, backgroundColor: S.pale}}>
         <Heading style={{fontSize: 18}}>HostelXpress pickup OTP · OTP 2</Heading>
         <T style={{fontSize: 12, lineHeight: 19}}>Enter this code on your assigned rover screen. Only a signed rover request and a verified ₹10 payment can authorize the correct compartment.</T>
         {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) > now &&
