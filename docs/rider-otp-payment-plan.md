@@ -86,3 +86,37 @@ the mobile presentation: a previously captured payment cannot revert to
 retrying a QR after a lost network response is deliberately prohibited.
 The active staging API remains unchanged and its test-only payment route is
 disabled without broadening Supabase access.
+
+
+## Read-only Razorpay TEST-key readiness probe
+
+Run this before enabling any hosted payment feature. It does **not** connect
+to Supabase, mutate Render, generate a QR, capture a payment, trigger a webhook,
+or perform an actual transaction.
+
+From the repository root with the Linux Python environment activated:
+
+\`\`\`bash
+PYTHONPATH=services/api python3 -m app.razorpay_readiness
+\`\`\`
+
+Make \`RAZORPAY_KEY_ID\`, \`RAZORPAY_KEY_SECRET\`, and optionally
+\`RAZORPAY_WEBHOOK_SECRET\` available to that process using an approved
+local secret manager or private environment; do not pass actual credentials
+as command-line flags, paste them into ChatGPT, add them to GitHub, or place
+them in the Android app. The readiness probe refuses keys without the
+\`rzp_test_\` prefix **without making any request**. Its sole outbound
+operation is \`GET /v1/payments/qr_codes?count=1\` over HTTPS with HTTP Basic
+Auth. The printed JSON contains only fixed booleans/status codes:
+\`qr_read_api_ok\`, \`authentication_rejected\`,
+\`forbidden_or_product_not_enabled\`, \`provider_rate_limited\`,
+\`network_or_tls_error\`, etc. It never prints the key, secret or provider
+response body.
+
+**Passing GET is not proof that QR creation is allowed.** Razorpay documents
+\`upi_qr\` as an on-demand feature and QR/UPI-intent payment testing may be
+restricted to Live mode. Do not scan a provider QR with a real UPI app while
+claiming that no money can move. In the current review branch, payment
+webhook tests are replayed against a fake provider and disposable PostgreSQL.
+End-to-end Razorpay integration must be verified in a separately authorized
+payment-test deployment after product capability is confirmed.
