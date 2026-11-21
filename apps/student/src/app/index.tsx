@@ -92,7 +92,7 @@ export default function Overview() {
         <Icon name="git-network-outline" color={C.ink}/>
         <View style={{flex:1,gap:5}}>
           <Heading style={{fontSize:16,lineHeight:23,letterSpacing:-.3}}>Autonomous 3-Compartment Network</Heading>
-          <T style={{fontSize:12,lineHeight:19,color:C.muted}}>Routes between Gate 2 Security Booth and all 7 Campus Hostels: Kaveri, Krishna, Godavari, Brahmaputra, Ganga, Yamuna &amp; Narmada.</T>
+          <T style={{fontSize:12,lineHeight:19,color:C.muted}}>Six campus hostels: Bhagat Singh, Ratan Tata, APJ Abdul Kalam and Vikram Sarabhai for boys; Kalpana Chawla and Gargi for girls. Campus pickup is at Gate 2.</T>
         </View>
       </Card>
       <Heading style={{fontSize:18,lineHeight:24,letterSpacing:-.3}}>Campus Services &amp; Rules</Heading>
@@ -111,6 +111,6 @@ export default function Overview() {
         <T style={{fontSize:12,lineHeight:18,color:C.muted,flex:1}}>Ordering food via Swiggy or Zomato? Set your drop address as &quot;Gate 2 HostelXpress Desk&quot; and request rover pickup.</T>
       </View>
     </>}
-    {booking && <BookModal initialHostel={user?.hostel_block||'A'} onClose={()=>setBooking(false)}/>}
+    {booking && <BookModal initialHostel={user?.hostel_block||undefined} onClose={()=>setBooking(false)}/>}
   </View>;
 }

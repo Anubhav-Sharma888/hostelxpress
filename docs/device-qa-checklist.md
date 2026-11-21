@@ -70,6 +70,6 @@ QA=1 and QA=0 bundles differ with distinct SHA-256 values.
 ## Known deferred items (do not fail the build for these)
 
 - Real payment capture (Razorpay activation pending) and physical unlock — demo/wording only
-- Real hostel names, OTP-based rider flow, campus routes — external inputs pending
+- Six actual hostel names were confirmed by the owner on 21 November 2026; see reviews/2026-11-21-campus-hostels.md. Surveyed routes and physical OTP integration remain external inputs.
 - A signup that requires email confirmation now preserves name/hostel as Supabase user metadata and offers them on first sign-in; that path is unit-tested but was never exercised on a live account — verify it if confirmation gets re-enabled
 - Report anything unexpected with a screenshot and the app version to the phase review.

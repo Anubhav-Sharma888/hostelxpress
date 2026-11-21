@@ -195,7 +195,7 @@ function DeliveryContent() {
           </View>
           <View style={{flex: 1, minWidth: 0}}>
             <T style={{fontFamily: 'DMSansBold', fontSize: 14}}>{qa ? 'QA sample rover' : order.bot ? 'Rover Bot ' + shortId(order.bot.id) : 'Campus rover'}</T>
-            <T style={{fontSize: 12, color: S.muted}}>{destination} Hostel entrance</T>
+            <T style={{fontSize: 12, color: S.muted}}>{destination} entrance</T>
           </View>
           <View style={{maxWidth: '32%'}}><Label>Order ref</Label><T style={{fontFamily: 'DMSansBold', fontSize: 12}}>{shortId(order.id)}</T></View>
         </View>
@@ -338,7 +338,7 @@ function DeliveryContent() {
           <T style={{fontSize: 10, fontFamily: 'DMSansBold', color: S.white}}>{qa ? 'QA SAMPLE DELIVERY' : order.status === 'Transit' ? 'LIVE EN ROUTE' : status.toUpperCase()}</T>
         </View>
         <Heading style={{fontSize: 26, lineHeight: 33, color: '#EAF1FF', letterSpacing: -.6}}>
-          {order.status === 'Transit' ? 'ROVER EN ROUTE TO ' + destination.toUpperCase() + ' HOSTEL' : STATUS_COPY[order.status].title}
+          {order.status === 'Transit' ? 'ROVER EN ROUTE TO ' + destination.toUpperCase() : STATUS_COPY[order.status].title}
         </Heading>
         <T style={{fontSize: 13, lineHeight: 20, color: '#DAE2FD'}}>→ Next: Meet rover at Hostel Porch upon arrival</T>
         {!qa && ['Pending', 'Loaded', 'Transit'].includes(order.status) &&

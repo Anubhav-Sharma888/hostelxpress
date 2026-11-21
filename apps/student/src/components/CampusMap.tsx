@@ -2,10 +2,10 @@ import React from 'react';
 import {View} from 'react-native';
 import Svg, {Circle, Line, Path, Rect, Text as SvgText} from 'react-native-svg';
 import type {OrderStatus} from '../api';
-import {hostelName} from '../campus';
+import {DEFAULT_HOSTEL, hostelName} from '../campus';
 import {Icon, T} from '../ui';
 
-export function CampusMap({status, hostel = 'C', rover}: {status?: OrderStatus; hostel?: string; rover?: string}) {
+export function CampusMap({status, hostel = DEFAULT_HOSTEL, rover}: {status?: OrderStatus; hostel?: string; rover?: string}) {
   const arrived = status && ['Arrived', 'Paid', 'Completed'].includes(status);
   const position = arrived ? {x: 306, y: 65} : status === 'Transit' ? {x: 201, y: 120} : {x: 42, y: 191};
   return <View style={{gap: 12}}>
@@ -33,8 +33,8 @@ export function CampusMap({status, hostel = 'C', rover}: {status?: OrderStatus; 
         </>}
         <SvgText x={41} y={220} fontFamily="sans-serif" textAnchor="middle" fontSize={11} fontWeight="600" fill="#0B1C30">Gate 2</SvgText>
         <SvgText x={190} y={151} fontFamily="sans-serif" textAnchor="middle" fontSize={10} fill="#565E74">Academic Ring</SvgText>
-        <SvgText x={300} y={94} fontFamily="sans-serif" textAnchor="middle" fontSize={10} fill="#0B1C30">{hostelName(hostel)}</SvgText>
       </Svg>
+      <T style={{fontSize: 12, color: '#0B1C30', textAlign: 'right', paddingHorizontal: 12, paddingBottom: 10}}>{hostelName(hostel)}</T>
     </View>
     <View style={{flexDirection: 'row', gap: 7, alignItems: 'flex-start'}}>
       <Icon name="information-circle-outline" size={16} color="#565E74" />

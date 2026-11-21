@@ -19,7 +19,7 @@ Only the API URL belongs in EXPO_PUBLIC_API_URL. Expo inlines public environment
 
 ## Implemented flow
 
-- Explicit demo sign-in with editable name and demo hostel A–G, plus real Supabase sign-in/sign-up when configured.
+- Explicit demo sign-in with editable name and the six owner-confirmed campus hostels, plus real Supabase sign-in/sign-up when configured.
 - Registration preserves the entered name with the existing database trigger and keeps the hostel for onboarding after email confirmation. Existing saved profile fields are preserved. Legacy accounts displaying `Student` can correct their name through **Profile → Edit profile → Save changes**; the app does not guess whether a nonempty name was intentionally chosen.
 - Responsive overview, booking dialog, server-assigned compartment, order history, profile, and help.
 - Server-backed order progression through loading, dispatch, arrival, demo payment, and confirmed collection.

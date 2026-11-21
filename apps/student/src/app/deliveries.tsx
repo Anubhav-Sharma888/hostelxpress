@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Pressable, View} from 'react-native';
 import {router} from 'expo-router';
 import {BookModal} from '../components/BookModal';
+import {hostelName} from '../campus';
 import {COLORS as C, formatAmount, formatDate, isActive, shortId, STATUS_COPY} from '../model';
 import {useApp} from '../state';
 import {Button, Card, common, ErrorNotice, Heading, Icon, Label, Loading, T} from '../ui';
@@ -34,7 +35,7 @@ export default function Deliveries() {
           <View style={{flex: 1, minWidth: 200}}>
             <Heading style={{fontSize: 28, lineHeight: 36, letterSpacing: -0.8}}>Parcel Vault</Heading>
             <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>
-              {user?.hostel_block ? 'Hostel Block ' + user.hostel_block + ' Porch' : 'Gate 2 to your campus doorstep'}
+              {user?.hostel_block ? hostelName(user.hostel_block) + ' porch' : 'Gate 2 to your campus doorstep'}
             </T>
           </View>
           <Button variant="primary" icon="add-outline" onPress={() => setBooking(true)} accessibilityLabel="Book a delivery">
@@ -177,7 +178,7 @@ export default function Deliveries() {
                       </View>
                       <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
                         <Icon name="business-outline" size={14} color={C.lime} />
-                        <T style={{fontSize: 11, fontFamily: 'DMSansBold', color: '#EDF0FF'}}>Hostel {order.destination_hostel_block}</T>
+                        <T style={{fontSize: 11, fontFamily: 'DMSansBold', color: '#EDF0FF'}}>{hostelName(order.destination_hostel_block)}</T>
                       </View>
                     </View>
                   </View>
@@ -234,7 +235,7 @@ export default function Deliveries() {
                         {order.parcel_label || 'Campus Delivery'}
                       </T>
                       <T style={{fontSize: 11, color: C.muted}}>
-                        {shortId(order.id)} · Gate 2 → Hostel {order.destination_hostel_block}
+                        {shortId(order.id)} · Gate 2 → {hostelName(order.destination_hostel_block)}
                       </T>
                     </View>
                   </View>
