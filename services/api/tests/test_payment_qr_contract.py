@@ -156,3 +156,76 @@ def test_refunded_attempt_is_never_misrepresented_as_paid(payment_api):
     assert response.json()['status']=='refunded'
     assert response.json()['qr_image_url'] is None
     assert env['provider'].calls==1
+
+
+def read_payment(env):
+    return env['client'].get('/v1/orders/'+str(env['order'])+'/payment')
+
+
+def test_get_payment_before_creating_does_not_start_payment(payment_api):
+    env=payment_api
+    missing=read_payment(env)
+    assert missing.status_code==404
+    assert env['provider'].calls==0
+    with env['db'].connection() as conn:
+        assert conn.execute('SELECT count(*) AS n FROM public.transactions WHERE order_id=%s',
+                            (env['order'],)).fetchone()['n']==0
+
+
+def test_payment_status_recovered_without_new_provider_call(payment_api):
+    env=payment_api
+    initial=pay(env)
+    assert initial.status_code==200
+    a=read_payment(env)
+    b=read_payment(env)
+    assert a.status_code==b.status_code==200
+    assert a.json()==b.json()==initial.json()
+    assert env['provider'].calls==1
+
+
+def test_ambiguous_creation_read_only_reconciliation_status(payment_api):
+    env=payment_api
+    env['provider'].failure=True
+    assert pay(env).status_code==502
+    for _ in range(2):
+        result=read_payment(env)
+        assert result.status_code==200
+        assert result.json()['status']=='reconciling'
+        assert result.json()['qr_image_url'] is None
+        assert result.json()['qr_id'] is None
+    assert env['provider'].calls==1
+
+
+def test_expired_qr_can_be_inspected_but_not_regenerated(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.transactions SET expires_at=now()-interval '1 minute' WHERE order_id=%s",
+                     (env['order'],))
+    result=read_payment(env)
+    assert result.status_code==200
+    assert datetime.fromisoformat(result.json()['expires_at']) < service.now()
+    assert pay(env).status_code==409
+    assert env['provider'].calls==1
+
+
+def test_get_payment_protected_against_cross_student(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    env['client'].app.dependency_overrides[current_user]=lambda: Principal(uuid4(), False)
+    assert read_payment(env).status_code==404
+    assert env['provider'].calls==1
+
+
+@pytest.mark.parametrize('status,expected', [('Refunded','refunded'),('Failed','failed'),('Captured','paid')])
+def test_get_payment_terminal_financial_state_without_payable_qr(payment_api,status,expected):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.transactions SET status=%s,razorpay_payment_id=%s,"
+                     "captured_at=now() WHERE order_id=%s",(status,'pay_test_fixture',env['order']))
+    result=read_payment(env)
+    assert result.status_code==200
+    assert result.json()['status']==expected
+    assert result.json()['qr_image_url'] is None
+    assert env['provider'].calls==1
