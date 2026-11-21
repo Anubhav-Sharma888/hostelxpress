@@ -1,8 +1,8 @@
 import React, {useEffect, useState} from 'react';
-import {Image, Pressable, View} from 'react-native';
+import {Image, Pressable, TextInput, View} from 'react-native';
 import {router, useLocalSearchParams} from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import {ApiError, Order, Payment, request} from '../../api';
+import {ApiError, Order, Payment, PickupOtp2, request} from '../../api';
 import {hostelName} from '../../campus';
 import {CampusMap} from '../../components/CampusMap';
 import {FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
@@ -31,6 +31,10 @@ function DeliveryContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
+  const [pickupOtp, setPickupOtp] = useState<PickupOtp2 | null>(null);
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [courierCode, setCourierCode] = useState('');
+  const [courierQueued, setCourierQueued] = useState(false);
   const [previewStage, setPreviewStage] = useState<number | null>(null);
   const [showPreviewControls, setShowPreviewControls] = useState(false);
   const now = useClock();
@@ -54,6 +58,22 @@ function DeliveryContent() {
         }
       });
     return () => { active = false; };
+  }, [paymentToken, paymentOrderId, paymentOrderStatus]);
+
+  // Read-only recovery of an already issued pickup code; it never creates
+  // one and does not issue any compartment command.
+  useEffect(() => {
+    if (!paymentToken || !paymentOrderId || paymentOrderStatus !== 'Paid') return;
+    let active = true;
+    void request<PickupOtp2>('/v1/orders/' + encodeURIComponent(paymentOrderId) + '/pickup-otp',
+      paymentToken).then(result => {
+        if (active) setPickupOtp(result);
+      }).catch(err => {
+        if (active && !(err instanceof ApiError && err.status === 404)) {
+          setError((err as Error).message);
+        }
+      });
+    return () => {active = false;};
   }, [paymentToken, paymentOrderId, paymentOrderStatus]);
 
   if (!storedOrder) {
@@ -98,6 +118,35 @@ function DeliveryContent() {
     try { await advance(order.id, next.action); }
     catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
+  };
+  const sendCourierCode = async () => {
+    if (!session || session.mode !== 'real' || !storedOrder || otpBusy) return;
+    if (!/^[0-9]{4,8}$/.test(courierCode)) {
+      setError('Enter the 4–8 digit OTP provided by your delivery company.');
+      return;
+    }
+    setOtpBusy(true);
+    setError(null);
+    setCourierQueued(false);
+    try {
+      await request('/v1/orders/' + encodeURIComponent(storedOrder.id) + '/courier-code',
+        session.access_token, {method: 'POST', body: {code: courierCode}, timeoutMs: 75000});
+      setCourierCode('');
+      setCourierQueued(true);
+    } catch (err) {setError((err as Error).message);}
+    finally {setOtpBusy(false);}
+  };
+  const createPickupOtp = async () => {
+    if (!session || session.mode !== 'real' || !storedOrder || otpBusy) return;
+    setOtpBusy(true);
+    setError(null);
+    try {
+      const issued = await request<PickupOtp2>(
+        '/v1/orders/' + encodeURIComponent(storedOrder.id) + '/pickup-otp',
+        session.access_token, {method: 'POST', timeoutMs: 75000});
+      setPickupOtp(issued);
+    } catch (err) {setError((err as Error).message);}
+    finally {setOtpBusy(false);}
   };
   const preparePayment = async () => {
     if (!session || session.mode === 'qa-preview' || busy) return;
@@ -186,7 +235,7 @@ function DeliveryContent() {
         </View>}
         <View style={{backgroundColor: '#FFDBCE', borderRadius: 10, padding: 14, gap: 6}}>
           <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: '#7F2B00'}}>Automated Unlock</T>
-          <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Verified payment authorizes an unlock request. Wait for the rover to confirm your assigned compartment is open.</T>
+          <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Payment and your HostelXpress pickup OTP (OTP 2) must BOTH be verified before the assigned inner lid can be authorized.</T>
         </View>
         {expired && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
           This QR has expired. Do not pay it. Contact support so the earlier payment attempt can be reconciled safely.
@@ -218,11 +267,28 @@ function DeliveryContent() {
         <View style={{height: 68, width: 68, borderRadius: 34, backgroundColor: unlocked ? '#2DA498' : S.orange, alignItems: 'center', justifyContent: 'center'}}>
           <Icon name={unlocked ? 'lock-open-outline' : 'time-outline'} size={34} color="#FFFFFF" />
         </View>
-        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : 'Payment Confirmed · Waiting for Unlock'}</Heading>
+        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : 'Payment Confirmed · Pickup OTP Required'}</Heading>
         <T style={{fontSize: 13, lineHeight: 21, textAlign: 'center', color: unlocked ? S.teal : '#DAE2FD'}}>
-          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : 'Verifying hardware safety and waiting for the rover acknowledgement. Please stand clear of the compartment door.'}
+          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : 'Generate OTP 2 below, then enter it on the rover display. Payment alone cannot open the compartment.'}
         </T>
         <Button variant="secondary" icon="headset-outline" onPress={help}>Get Help</Button>
+      </Card>}
+
+      {order.status === 'Paid' && !unlocked && <Card style={{...card, backgroundColor: S.pale}} testID="pickup-otp2-card">
+        <Heading style={{fontSize: 18}}>HostelXpress pickup OTP · OTP 2</Heading>
+        <T style={{fontSize: 12, lineHeight: 19}}>Enter this code on your assigned rover screen. Only a signed rover request and a verified ₹10 payment can authorize the correct compartment.</T>
+        {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) > now &&
+          <View style={{alignItems: 'center', padding: 14, gap: 6}}>
+            <Heading style={{fontSize: 34, letterSpacing: 8}}>{pickupOtp.code}</Heading>
+            <T style={{fontSize: 12}}>Bay {pickupOtp.compartment} · Valid until {formatTime(pickupOtp.expires_at)}</T>
+          </View>}
+        {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) <= now &&
+          <T accessibilityRole="alert" style={{color: '#BA1A1A'}}>Pickup code expired. Contact support for reconciliation.</T>}
+        {session?.mode === 'real' && !pickupOtp &&
+          <Button onPress={() => void createPickupOtp()} loading={otpBusy} icon="shield-checkmark-outline"
+            testID="pickup-otp2-create">Generate pickup OTP 2</Button>}
+        {qa && <T style={{fontSize: 12}}>QA preview only · No real pickup code will be issued.</T>}
+        {session?.mode === 'demo' && <T style={{fontSize: 12}}>This feature requires real authenticated delivery and captured payment.</T>}
       </Card>}
 
       <Card style={card}>
@@ -250,6 +316,23 @@ function DeliveryContent() {
         <Icon name="headset-outline" /><T style={{flex: 1, fontFamily: 'DMSansBold'}}>Get help with {shortId(order.id)}</T>
       </Pressable>
     </> : <>
+      {order.status === 'Pending' && order.bot && <Card style={card}>
+        <Heading style={{fontSize: 17}}>Courier OTP · OTP 1</Heading>
+        <T style={{fontSize: 12, lineHeight: 19}}>If Amazon, Flipkart or your delivery company sends a code, enter it here. HostelXpress forwards it once to the assigned rover display for the delivery person. OTP 1 does not open a compartment.</T>
+        {session?.mode === 'real' && <>
+          <TextInput accessibilityLabel="Delivery-company OTP 1" value={courierCode} onChangeText={setCourierCode}
+            placeholder="4–8 digit courier OTP" keyboardType="number-pad" secureTextEntry
+            maxLength={8} autoComplete="off" style={{backgroundColor: S.pale, borderRadius: 9,
+            padding: 14, minHeight: 48, fontSize: 16, color: S.ink}}/>
+          <Button onPress={() => void sendCourierCode()} disabled={otpBusy || !/^[0-9]{4,8}$/.test(courierCode)}
+            loading={otpBusy} icon="send-outline" testID="courier-otp1-send">Send OTP 1 to rover display</Button>
+          {courierQueued && <T accessibilityRole="alert" style={{fontSize: 12, color: S.teal}}>
+            Code queued for one-time rover display. This does not confirm courier verification or authorize a lid.
+          </T>}
+        </>}
+        {qa && <T style={{fontSize: 12}}>Offline preview · No courier code is transmitted.</T>}
+        {demo && <T style={{fontSize: 12}}>Courier relay requires a real assigned delivery.</T>}
+      </Card>}
       <Card style={{...card, backgroundColor: S.dark, padding: 16, gap: 10}}>
         <View style={{backgroundColor: S.orange, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start'}}>
           <T style={{fontSize: 10, fontFamily: 'DMSansBold', color: S.white}}>{qa ? 'QA SAMPLE DELIVERY' : order.status === 'Transit' ? 'LIVE EN ROUTE' : status.toUpperCase()}</T>

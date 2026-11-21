@@ -47,7 +47,8 @@ def live(db,database_url):
         conn.execute("INSERT INTO public.orders(id,user_id,bot_id,compartment_id,status,destination_hostel_block) VALUES(%s,%s,%s,1,'Arrived','A')",(order,user,bot))
         conn.execute('INSERT INTO public.transactions(order_id,razorpay_qr_id) VALUES(%s,%s)',(order,qr))
     settings=Settings(app_env='production',database_url=database_url,supabase_url='https://example.supabase.co',
-                      razorpay_webhook_secret=WEBHOOK_SECRET,worker_enabled=False,trusted_hosts='testserver')
+                      razorpay_webhook_secret=WEBHOOK_SECRET,pickup_otp_secret='fixture-otp2-secret-at-least-32-chars',
+                      worker_enabled=False,trusted_hosts='testserver')
     with TestClient(create_app(settings)) as client:
         client.app.state.provider=Provider(qr)
         yield {'client':client,'db':db,'user':user,'bot':bot,'order':order,'qr':qr}
@@ -69,6 +70,22 @@ def device(live,body):
     path=f'/v1/devices/{live["bot"]}/messages'
     signature=hmac.new(DEVICE_SECRET,f'{stamp}.POST.{path}.'.encode()+raw,hashlib.sha256).hexdigest()
     return live['client'].post(path,content=raw,headers={'Content-Type':'application/json','X-Device-Timestamp':stamp,'X-Device-Signature':signature})
+
+
+
+def student_pickup(live):
+    """Authenticated student gets OTP2; signed rover redeems it."""
+    live['client'].app.dependency_overrides[current_user]=lambda:Principal(live['user'],False)
+    issued=live['client'].post('/v1/orders/'+str(live['order'])+'/pickup-otp')
+    assert issued.status_code==200,issued.text
+    path=f'/v1/devices/{live["bot"]}/pickup-otp'
+    body=json.dumps({'order_id':str(live['order']),'compartment':1,'code':issued.json()['code']},
+                    separators=(',',':')).encode()
+    stamp=str(int(datetime.now(timezone.utc).timestamp()))
+    signature=hmac.new(DEVICE_SECRET,f'{stamp}.POST.{path}.'.encode()+body,hashlib.sha256).hexdigest()
+    return live['client'].post(path,content=body,headers={
+        'Content-Type':'application/json','X-Device-Timestamp':stamp,
+        'X-Device-Signature':signature})
 
 
 def base(live,kind):
@@ -109,14 +126,14 @@ def test_verified_capture_is_atomic_and_idempotent(live):
     event_id=str(uuid4())
     first=webhook(live,event_id)
     assert first.status_code==200,first.text
-    assert first.json()['outcome']=='captured_unlock_queued'
+    assert first.json()['outcome']=='captured_awaiting_pickup_otp'
     same=webhook(live,event_id)
     assert same.status_code==200 and same.json()['duplicate'] is True
     different_event=webhook(live)
     assert different_event.status_code==200
     with live['db'].connection() as conn:
         assert conn.execute('SELECT status FROM public.orders WHERE id=%s',(live['order'],)).fetchone()['status']=='Paid'
-        assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s',(live['order'],)).fetchone()['n']==1
+        assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s',(live['order'],)).fetchone()['n']==0
         assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.webhook_inbox').fetchone()['n']==2
 
 
@@ -143,7 +160,7 @@ def test_offline_payment_stays_paid_without_unlock(live):
         conn.execute("UPDATE public.bots SET last_seen_at=now()-interval '30 seconds' WHERE id=%s",(live['bot'],))
     result=webhook(live)
     assert result.status_code==200,result.text
-    assert result.json()['outcome']=='captured_waiting_for_safe_device'
+    assert result.json()['outcome']=='captured_awaiting_pickup_otp'
     with live['db'].connection() as conn:
         assert conn.execute('SELECT count(*) AS n FROM hostelxpress_private.command_outbox').fetchone()['n']==0
         assert conn.execute('SELECT status FROM public.orders WHERE id=%s',(live['order'],)).fetchone()['status']=='Paid'
@@ -171,6 +188,7 @@ def test_device_event_cannot_arrive_another_order(live):
 
 def test_replayed_ack_cannot_reopen_completed_order(live):
     assert webhook(live).status_code==200
+    assert student_pickup(live).status_code==200
     with live['db'].connection() as conn:
         command=conn.execute("UPDATE hostelxpress_private.command_outbox SET status='executed',attempts=1 WHERE order_id=%s RETURNING id",(live['order'],)).fetchone()['id']
         conn.execute("UPDATE public.orders SET status='Completed',completed_at=now(),compartment_released_at=now() WHERE id=%s",(live['order'],))
@@ -219,7 +237,7 @@ def test_payment_webhook_rejects_currency_status_and_duplicate_event_identity(li
     event_id=str(uuid4())
     first=webhook(live,event_id)
     assert first.status_code==200,first.text
-    assert first.json()['outcome']=='captured_unlock_queued'
+    assert first.json()['outcome']=='captured_awaiting_pickup_otp'
     # A valid new signature does not allow an old event ID to be reused for a
     # different body; it cannot alter the settled payment or reissue unlocks.
     altered=webhook(live,event_id,event_type='qr_code.credited',
@@ -234,7 +252,7 @@ def test_payment_webhook_rejects_currency_status_and_duplicate_event_identity(li
         assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.webhook_inbox",
                             ).fetchone()['n']==1
         assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox "
-                            "WHERE order_id=%s",(live['order'],)).fetchone()['n']==1
+                            "WHERE order_id=%s",(live['order'],)).fetchone()['n']==0
 
 
 def test_late_failed_event_after_capture_does_not_revoke_paid_order(live):
@@ -250,7 +268,7 @@ def test_late_failed_event_after_capture_does_not_revoke_paid_order(live):
         assert conn.execute("SELECT status FROM public.transactions WHERE order_id=%s",
                             (live['order'],)).fetchone()['status']=='Captured'
         assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox "
-                            "WHERE order_id=%s",(live['order'],)).fetchone()['n']==1
+                            "WHERE order_id=%s",(live['order'],)).fetchone()['n']==0
         assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.incidents WHERE order_id=%s",
                             (live['order'],)).fetchone()['n']==0
 
@@ -259,12 +277,19 @@ def test_synthetic_capture_to_signed_inner_lid_completion_without_real_actuation
     """End-to-end financial + device state machine, with no UPI or physical rover."""
     response=webhook(live)
     assert response.status_code==200,response.text
-    assert response.json()['outcome']=='captured_unlock_queued'
+    assert response.json()['outcome']=='captured_awaiting_pickup_otp'
     live['client'].app.dependency_overrides[current_user] = lambda: Principal(live['user'], False)
     payment=live['client'].get('/v1/orders/'+str(live['order'])+'/payment')
     assert payment.status_code==200,payment.text
     assert payment.json()['status']=='paid'
     assert payment.json()['qr_image_url'] is None
+
+    with live['db'].connection() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox "
+                            "WHERE order_id=%s",(live['order'],)).fetchone()['n']==0
+    pickup=student_pickup(live)
+    assert pickup.status_code==200,pickup.text
+    assert pickup.json()['status']=='queued_not_executed'
 
     with live['db'].connection() as conn:
         row=conn.execute("SELECT * FROM hostelxpress_private.command_outbox "

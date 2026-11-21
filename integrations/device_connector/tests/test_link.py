@@ -248,7 +248,7 @@ class LinkTests(unittest.TestCase):
             thread.join(timeout=2)
 
 
-    def test_rider_otp_uses_bot_signed_https_path_and_does_not_unlock(self):
+    def test_pickup_otp_uses_bot_signed_https_path_and_does_not_unlock(self):
         secret = "test-otp-device-secret-at-least-32-chars"
         calls = []
         assigned_command = "11111111-1111-4111-8111-111111111111"
@@ -277,12 +277,12 @@ class LinkTests(unittest.TestCase):
         try:
             link = self.link(http_sender=None, api_url=f"http://127.0.0.1:{server.server_port}",
                              device_secret=secret, allow_loopback_http=True)
-            result = link.submit_rider_otp(ORDER, 1, "003721")
+            result = link.submit_pickup_otp(ORDER, 1, "003721")
             self.assertEqual(result, {
                 "accepted": True,"command_id":assigned_command,"status":"queued_not_executed"})
             self.assertEqual(len(calls),1)
             path,body,signed=calls[0]
-            self.assertEqual(path, f"/v1/devices/{BOT}/rider-otp")
+            self.assertEqual(path, f"/v1/devices/{BOT}/pickup-otp")
             self.assertTrue(signed)
             self.assertEqual(json.loads(body), {
                 "order_id":ORDER, "compartment":1, "code":"003721"})
@@ -294,21 +294,21 @@ class LinkTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
-    def test_rider_otp_refuses_invalid_input_before_any_network_call(self):
+    def test_pickup_otp_refuses_invalid_input_before_any_network_call(self):
         link = self.link()
         for code in ("12345","1234567"," 123456","１２３４５６","",123456):
             with self.subTest(code=code),self.assertRaises(ValueError):
-                link.submit_rider_otp(ORDER,1,code)
+                link.submit_pickup_otp(ORDER,1,code)
         for bay in (0,4,True,"1"):
             with self.subTest(compartment=bay),self.assertRaises(ValueError):
-                link.submit_rider_otp(ORDER,bay,"123456")
+                link.submit_pickup_otp(ORDER,bay,"123456")
         with self.assertRaises(ValueError):
-            link.submit_rider_otp("invalid-id",1,"123456")
+            link.submit_pickup_otp("invalid-id",1,"123456")
         link.close()
         self.links.remove(link)
         unsynced = self.link(clock_synchronized=lambda: False)
         with self.assertRaises(ValueError):
-            unsynced.submit_rider_otp(ORDER,1,"123456")
+            unsynced.submit_pickup_otp(ORDER,1,"123456")
         self.assertEqual(self.received, [])
         self.assertEqual(self.calls, [])
 

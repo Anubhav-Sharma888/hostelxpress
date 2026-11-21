@@ -28,10 +28,23 @@ class Booking(StrictModel):
 class DemoAdvance(StrictModel):
     action: Literal['load','dispatch','arrive','pay','close_lid']
 
-class RiderOtpAttempt(BaseModel):
-    # Do not trim whitespace or coerce the code into an integer: leading zeros
-    # are meaningful, and the raw code must never become an order/profile field.
+class PickupOtpAttempt(BaseModel):
+    # OTP2 entered on the rover; leading zeroes matter.
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
     order_id: UUID
     compartment: int = Field(ge=1,le=3)
-    code: str = Field(min_length=6,max_length=6,pattern=r'^[0-9]{6}$')
+    code: str = Field(min_length=6,max_length=6,pattern=r'^[0-9]{6}
+)
+
+
+class CourierCodeRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    order_id: UUID
+    compartment: int = Field(ge=1,le=3)
+
+
+class CourierCodeSubmission(BaseModel):
+    # OTP1: from the courier, student forwards to display; not a verified code.
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
+    code: str = Field(min_length=4,max_length=8,pattern=r'^[0-9]{4,8}
+)

@@ -259,7 +259,8 @@ def process_webhook(db,provider,raw,event_id):
                 if order['status']=='Arrived':
                     conn.execute("UPDATE public.orders SET status='Paid',paid_at=now() WHERE id=%s",(order['id'],))
                     service.event(conn,order['id'],'Paid','Razorpay captured payment verified by the server')
-                queued=service.enqueue_unlock(conn,order,bot,is_demo=False)
-                outcome='captured_unlock_queued' if queued else 'captured_waiting_for_safe_device'
+                # Only a signed rover OTP2 redemption may enqueue an inner
+                # unlock. Payment verification alone is not sufficient.
+                outcome='captured_awaiting_pickup_otp'
         conn.execute('INSERT INTO hostelxpress_private.webhook_inbox(event_id,payload_sha256,event_type,payment_id,outcome) VALUES(%s,%s,%s,%s,%s)',(event_id,digest,event_type,payment_id,outcome))
         return {'received':True,'duplicate':False,'outcome':outcome}

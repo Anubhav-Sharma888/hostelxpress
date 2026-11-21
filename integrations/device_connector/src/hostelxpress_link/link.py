@@ -205,8 +205,8 @@ class HostelxpressLink:
             raise ConnectionError("Critical events remain queued until device HTTP ingestion is configured")
         return self._post_signed(f"/v1/devices/{self.bot_id}/messages", payload)
 
-    def submit_rider_otp(self, order_id: str, compartment: int, code: str) -> dict:
-        """Ask the server to verify a Gate 2 rider code; NEVER actuate a lid.
+    def submit_pickup_otp(self, order_id: str, compartment: int, code: str) -> dict:
+        """Ask the server to verify student pickup OTP2; NEVER actuate a lid.
 
         This attempt is not a durable event: a lost response may mean that the
         OTP was already consumed and a command queued. The operator must
@@ -216,19 +216,41 @@ class HostelxpressLink:
         if type(compartment) is not int or not 1 <= compartment <= 3:
             raise ValueError("Assigned compartment 1-3 is required")
         if type(code) is not str or re.fullmatch(r"[0-9]{6}", code, re.ASCII) is None:
-            raise ValueError("The rider OTP must contain exactly six ASCII digits")
+            raise ValueError("Pickup OTP2 must contain exactly six ASCII digits")
         if self.clock_synchronized is None or self.clock_synchronized() is not True:
-            raise ValueError("A synchronized device clock is required for rider OTP submission")
-        result = self._post_signed(f"/v1/devices/{self.bot_id}/rider-otp", {
+            raise ValueError("A synchronized device clock is required for pickup OTP2 submission")
+        result = self._post_signed(f"/v1/devices/{self.bot_id}/pickup-otp", {
             "order_id": order_id, "compartment": compartment, "code": code,
         })
         if not isinstance(result, dict) or result.get("accepted") is not True or result.get("status") != "queued_not_executed":
-            raise ConnectionError("Server did not confirm rider OTP authorization")
+            raise ConnectionError("Server did not confirm pickup OTP2 authorization")
         try:
             command_id = _uuid(result["command_id"])
         except (KeyError, ValueError, TypeError):
             raise ConnectionError("Server returned an invalid queued command identity") from None
         return {"accepted": True, "command_id": command_id, "status": "queued_not_executed"}
+
+    def pull_courier_code(self, order_id: str, compartment: int) -> str:
+        """Retrieve OTP1 for a single display on the rover; NOT an unlock.
+
+        A lost HTTP response is deliberately not retried: the backend may
+        already have consumed the display-once code. Keep this out of logs,
+        persistent command ledgers and transport receipts.
+        """
+        order_id=_uuid(order_id)
+        if type(compartment) is not int or not 1 <= compartment <= 3:
+            raise ValueError("Assigned compartment 1-3 required")
+        if self.clock_synchronized is None or self.clock_synchronized() is not True:
+            raise ValueError("Synchronized device clock required for courier display")
+        response=self._post_signed(f"/v1/devices/{self.bot_id}/courier-code/display",{
+            "order_id":order_id,"compartment":compartment,
+        })
+        code=response.get("code") if isinstance(response,dict) else None
+        if (not isinstance(code,str) or re.fullmatch(r"[0-9]{4,8}",code,re.ASCII) is None
+                or response.get("status")!="display_once_only"
+                or response.get("otp_type")!="courier_display_otp1"):
+            raise ConnectionError("Server did not confirm a display-only courier OTP1")
+        return code
 
     def _queue(self, payload: dict) -> None:
         self._validate(payload)
