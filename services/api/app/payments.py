@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import httpx
@@ -91,13 +91,31 @@ def create_payment(db, provider, order_id, user_id, is_demo):
             # An HTTP timeout can still mean a provider QR exists: retain creating
             # state and require reconciliation rather than creating a duplicate.
             raise
-    if not (isinstance(qr.get('id'),str) and qr['id'] and qr.get('payment_amount')==1000
-            and qr.get('fixed_amount') is True and qr.get('usage')=='single_use'
-            and qr.get('type')=='upi_qr'):
+    if not (isinstance(qr,dict) and isinstance(qr.get('id'),str) and qr['id']
+            and qr.get('payment_amount')==1000 and qr.get('fixed_amount') is True
+            and qr.get('usage')=='single_use' and qr.get('type')=='upi_qr'):
         raise HTTPException(502,'Provider QR does not match this fixed-price payment intent')
+    if not is_demo:
+        # Treat a malformed provider response like an ambiguous creation: the
+        # durable intent stays 'creating' until an operator reconciles it.
+        if not re.fullmatch(r'qr_[A-Za-z0-9_-]{1,125}',qr['id']) or qr.get('status')!='active':
+            raise HTTPException(502,'Provider did not confirm an active fixed-price QR')
+        provider_close_by=qr.get('close_by')
+        if isinstance(provider_close_by,bool) or not isinstance(provider_close_by,int):
+            raise HTTPException(502,'Provider did not return a valid QR expiry')
+        try:
+            actual_expiry=datetime.fromtimestamp(provider_close_by,tz=timezone.utc)
+        except (OverflowError,OSError,ValueError):
+            raise HTTPException(502,'Provider QR expiry was invalid') from None
+        if actual_expiry<=service.now() or actual_expiry>expires_at+timedelta(seconds=60):
+            raise HTTPException(502,'Provider QR expiry does not match the payment intent')
+        expires_at=actual_expiry
+        url=qr.get('image_url')
+        if url is not None and (not isinstance(url,str) or not url.startswith('https://')):
+            raise HTTPException(502,'Provider QR image URL must use HTTPS')
     with db.connection() as conn:
         service.lock_order(conn,order_id,user_id)
-        payment = conn.execute("UPDATE public.transactions SET razorpay_qr_id=%s,qr_image_url=%s,provider_state='ready' WHERE request_id=%s AND provider_state='creating' RETURNING *",(qr['id'],qr.get('image_url'),request_id)).fetchone()
+        payment = conn.execute("UPDATE public.transactions SET razorpay_qr_id=%s,qr_image_url=%s,expires_at=%s,provider_state='ready' WHERE request_id=%s AND provider_state='creating' RETURNING *",(qr['id'],qr.get('image_url'),expires_at,request_id)).fetchone()
         if not payment:
             raise HTTPException(409,'Payment intent changed; refresh your order')
         return response(payment)

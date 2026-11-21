@@ -60,6 +60,7 @@ function DeliveryContent() {
   const handover = ['Arrived', 'Paid', 'Completed'].includes(order.status);
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
   const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
+  const alreadyPaid = payment?.status === 'paid';
   const next = nextDemoAction(order.status);
   const roverPosition = session?.mode === 'real' ? freshRoverPosition(order.bot, now) : null;
   const destination = hostelName(order.destination_hostel_block);
@@ -146,7 +147,7 @@ function DeliveryContent() {
           <Icon name="card-outline" color={S.muted} />
           <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>Debit / Campus Card</T><T style={{fontSize: 12, color: S.muted}}>Not available in this release</T></View>
         </View>
-        {payment && <View style={{gap: 12, alignItems: 'center'}}>
+        {payment && !alreadyPaid && <View style={{gap: 12, alignItems: 'center'}}>
           <Label>{payment.provider === 'demo' ? 'Nonpayable demo QR' : 'Secure payment QR'}</Label>
           <View style={{padding: 16, backgroundColor: S.white}}>
             {payment.provider === 'demo' && payment.qr_payload && !/^upi:/i.test(payment.qr_payload)
@@ -158,14 +159,19 @@ function DeliveryContent() {
           <T style={{fontSize: 12, lineHeight: 18, color: S.muted, textAlign: 'center'}}>
             {payment.provider === 'demo' ? 'This code is a demo reference. It cannot accept UPI payments.' : 'Wait for server verification after paying. Payment alone does not confirm the physical lid is open.'}
           </T>
-          {payment.expires_at && <T style={{fontSize: 12}}>{expired ? 'Payment preview expired.' : 'Valid until ' + formatTime(payment.expires_at)}</T>}
+          {payment.expires_at && <T style={{fontSize: 12}}>{expired ? 'QR expired. A new QR requires verification; contact support. Do not pay this QR.' : 'Valid until ' + formatTime(payment.expires_at)}</T>}
         </View>}
         <View style={{backgroundColor: '#FFDBCE', borderRadius: 10, padding: 14, gap: 6}}>
           <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: '#7F2B00'}}>Automated Unlock</T>
           <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Verified payment authorizes an unlock request. Wait for the rover to confirm your assigned compartment is open.</T>
         </View>
-        <Button onPress={() => void preparePayment()} loading={busy} disabled={qa} icon="flash-outline" testID="payment-create"
-          accessibilityLabel="Show UPI payment QR">{expired ? 'Refresh payment QR' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}</Button>
+        {alreadyPaid && <T accessibilityRole="alert" style={{fontSize: 13, color: S.teal}}>
+          Payment is verified. Waiting for the order and rover state to update. Do not pay again.
+        </T>}
+        <Button onPress={() => void preparePayment()} loading={busy} disabled={qa || expired || alreadyPaid} icon="flash-outline" testID="payment-create"
+          accessibilityLabel={expired ? 'Payment QR expired; contact support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
+          {expired ? 'QR expired · Get Help' : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
+        </Button>
         {qa && <T style={{fontSize: 12, color: S.muted}}>Offline sample · Payments require the connected backend.</T>}
       </Card>}
 
