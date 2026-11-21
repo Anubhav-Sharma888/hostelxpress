@@ -203,7 +203,7 @@ def test_wrong_currency_and_wrong_qr_cannot_capture_or_unlock(client, booking, d
         assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s", (order["id"],)).fetchone()["n"] == 0
 
 
-def test_replayed_capture_and_new_event_id_have_one_unlock_effect(client, booking, db):
+def test_replayed_capture_and_new_event_id_never_bypass_pickup_otp(client, booking, db):
     order, payment = arrived_payment(client, booking, db)
     with production_client(client) as live:
         live.app.state.provider = ProviderFixture(payment["qr_id"])
@@ -214,7 +214,7 @@ def test_replayed_capture_and_new_event_id_have_one_unlock_effect(client, bookin
         assert webhook(live, "evt_old_failure", event_type="payment.failed").status_code == 200
     with db.connection() as conn:
         assert conn.execute("SELECT status FROM public.orders WHERE id=%s", (order["id"],)).fetchone()["status"] == "Paid"
-        assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner'", (order["id"],)).fetchone()["n"] == 1
+        assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner'", (order["id"],)).fetchone()["n"] == 0
 
 
 def test_rider_timeout_does_not_release_from_stale_sensor_state(client, booking, db):
@@ -299,6 +299,12 @@ def test_late_executed_ack_for_expired_command_is_evidence_not_new_execution(cli
         assert webhook(live, "evt_late_execution_fixture").status_code == 200
         with db.connection() as conn:
             conn.execute("INSERT INTO hostelxpress_private.device_credentials(bot_id,secret) VALUES(%s,%s)", (order["bot_id"], DEVICE_SECRET))
+            # Inject an expired command as a DB fixture: live payments NEVER
+            # issue one without OTP2; this test only checks late ACK handling.
+            conn.execute("INSERT INTO hostelxpress_private.command_outbox"
+                         "(order_id,bot_id,compartment,command,is_demo,status) "
+                         "VALUES(%s,%s,%s,'unlock_inner',false,'pending')",
+                         (order["id"],order["bot_id"],order["compartment_id"]))
             command = conn.execute("UPDATE hostelxpress_private.command_outbox SET issued_at=now()-interval '20 seconds',expires_at=now()-interval '10 seconds',status='expired',attempts=1 WHERE order_id=%s RETURNING id", (order["id"],)).fetchone()
         stamp = service.now().isoformat().replace("+00:00", "Z")
         payload = {"schema_version": 1, "message_type": "ack", "message_id": str(uuid4()),

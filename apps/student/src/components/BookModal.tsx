@@ -3,7 +3,8 @@ import {AccessibilityInfo, KeyboardAvoidingView, Modal, Platform, Pressable, Scr
 import {router} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {newRequestId} from '../api';
-import {HOSTELS} from '../campus';
+import {HOSTELS, isCampusHostel} from '../campus';
+import {HostelPicker} from './HostelPicker';
 import {COLORS as C} from '../model';
 import {useApp} from '../state';
 import {Wordmark} from './AppShell';
@@ -14,7 +15,8 @@ export function BookModal({onClose,initialHostel}: {onClose:()=>void;initialHost
   const {width} = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
-  const [hostel,setHostel] = useState(initialHostel||user?.hostel_block||'A');
+  const initialDestination = initialHostel || user?.hostel_block || '';
+  const [hostel,setHostel] = useState(isCampusHostel(initialDestination) ? initialDestination : '');
   const [room,setRoom] = useState('');
   const [carrier,setCarrier] = useState('Amazon');
   const [label,setLabel] = useState('');
@@ -23,7 +25,7 @@ export function BookModal({onClose,initialHostel}: {onClose:()=>void;initialHost
   const [error,setError] = useState<string|null>(null);
   const [reduceMotion,setReduceMotion] = useState(false);
   const bookingLabel = [carrier,label.trim(),room.trim()].filter(Boolean).join(' · ');
-  const valid = !!label.trim() && !!room.trim() && bookingLabel.length<=80;
+  const valid = isCampusHostel(hostel) && !!label.trim() && !!room.trim() && bookingLabel.length<=80;
   useEffect(()=>{
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(()=>undefined);
   },[]);
@@ -68,14 +70,9 @@ export function BookModal({onClose,initialHostel}: {onClose:()=>void;initialHost
           </Card>
           <Card style={{padding:16,gap:10}}>
             <View style={common.between}><Heading style={{fontSize:18,lineHeight:25,letterSpacing:-.3}}>Destination Hostel</Heading><Label style={{letterSpacing:0}}>Step 1 of 3</Label></View>
-            <T style={{fontFamily:'DMSansBold',fontSize:12,color:C.muted}}>Select Residence Hall (7 Approved Hostels)</T>
-            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>
-              {HOSTELS.map(block=><Pressable key={block.id} accessibilityRole="radio" accessibilityLabel={'Hostel '+block.id} accessibilityState={{checked:hostel===block.id}}
-                onPress={()=>setHostel(block.id)} disabled={busy} style={{width:block.id==='G'?'100%':'48%',flexGrow:1,minHeight:48,paddingHorizontal:10,borderRadius:10,backgroundColor:hostel===block.id?'#E5EEFF':C.pale,flexDirection:'row',alignItems:'center',gap:8}}>
-                <Icon name={hostel===block.id?'radio-button-on-outline':'radio-button-off-outline'} color={hostel===block.id?C.primary:C.muted} size={20}/>
-                <T style={{fontFamily:'DMSansBold',fontSize:12,flex:1}}>{block.name}{block.id==='G'?' Hostel (West Quad)':''}</T>
-              </Pressable>)}
-            </View>
+            <T style={{fontFamily:'DMSansBold',fontSize:12,color:C.muted}}>Select Residence Hall ({HOSTELS.length} Hostels)</T>
+            <HostelPicker hostel={hostel} setHostel={setHostel}
+              label="Destination" note="Choose your hostel before confirming the booking." />
             <T style={{fontFamily:'DMSansBold',fontSize:12,color:C.muted}}>Room &amp; Wing details</T>
             <View style={{justifyContent:'center'}}>
               <TextInput testID="room-input" accessibilityLabel="Room and Wing details" value={room} onChangeText={setRoom} editable={!busy}

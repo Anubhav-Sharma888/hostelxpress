@@ -9,10 +9,12 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException,Request
+from pydantic import ValidationError
 from jsonschema import Draft202012Validator,FormatChecker
 from psycopg.types.json import Jsonb
 
-from . import service
+from . import service,pickup_otp_store
+from .models import PickupOtpAttempt,CourierCodeRequest
 
 SCHEMA=json.loads((Path(__file__).resolve().parents[3]/'contracts/mqtt/wire.schema.json').read_text())
 VALIDATOR=Draft202012Validator(SCHEMA,format_checker=FormatChecker())
@@ -188,7 +190,7 @@ def ingest(conn,bot_id,raw,*,via_mqtt=False):
             elif event_type=='parcel_loaded':
                 authorized=conn.execute("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s AND bot_id=%s AND compartment=%s AND command='unlock_outer' AND status='executed' AND is_demo=false",(order['id'],bot_id,order['compartment_id'])).fetchone()
                 if not authorized:
-                    raise HTTPException(409,'A verified rider OTP outer-lid authorization is required; its provider integration is not configured')
+                    raise HTTPException(409,'Gate staff must authorize an executed outer-lid command before parcel loading')
                 service.loaded(conn,order,bot)
             elif event_type=='arrived':
                 service.arrived(conn,order,bot)
@@ -207,6 +209,56 @@ def ingest(conn,bot_id,raw,*,via_mqtt=False):
 
 
 def install_routes(app):
+    @app.post('/v1/devices/{bot_id}/pickup-otp')
+    async def redeem_pickup_otp(bot_id:UUID,request:Request):
+        settings=request.app.state.settings
+        if not settings.pickup_otp_enabled:
+            raise HTTPException(404,'Student pickup OTP2 is unavailable')
+        raw=await request.body()
+        if len(raw)>512:
+            raise HTTPException(413,'Pickup OTP request too large')
+        def apply():
+            with request.app.state.db.connection() as conn:
+                try:
+                    verify_http(conn,bot_id,raw,request.headers.get('X-Device-Timestamp'),
+                                request.headers.get('X-Device-Signature'),request.url.path)
+                except HTTPException as exc:
+                    if exc.status_code==401:
+                        request.app.state.device_throttle.check(request.client.host if request.client else '')
+                    raise
+                try:
+                    submission=PickupOtpAttempt.model_validate_json(raw)
+                except ValidationError:
+                    raise HTTPException(422,'Invalid pickup OTP2 submission') from None
+                return pickup_otp_store.redeem_pickup_code(
+                    conn,submission.order_id,bot_id,submission.compartment,
+                    submission.code,settings.pickup_otp_secret.encode())
+        result=await asyncio.to_thread(apply)
+        if not result['accepted']:
+            raise HTTPException(403,'Pickup OTP2 invalid, expired, locked or already used')
+        return result
+
+    @app.post('/v1/devices/{bot_id}/courier-code/display')
+    async def get_courier_code(bot_id:UUID,request:Request):
+        settings=request.app.state.settings
+        if not settings.pickup_otp_enabled:
+            raise HTTPException(404,'Courier OTP1 relay is unavailable')
+        raw=await request.body()
+        if len(raw)>512:
+            raise HTTPException(413,'Courier display request too large')
+        def apply():
+            with request.app.state.db.connection() as conn:
+                verify_http(conn,bot_id,raw,request.headers.get('X-Device-Timestamp'),
+                            request.headers.get('X-Device-Signature'),request.url.path)
+                try:
+                    submission=CourierCodeRequest.model_validate_json(raw)
+                except ValidationError:
+                    raise HTTPException(422,'Invalid courier display request') from None
+                return pickup_otp_store.take_courier_code(
+                    conn,submission.order_id,bot_id,submission.compartment,
+                    settings.pickup_otp_secret.encode())
+        return await asyncio.to_thread(apply)
+
     @app.post('/v1/devices/{bot_id}/messages')
     async def messages(bot_id:UUID,request:Request):
         if request.app.state.settings.is_demo:

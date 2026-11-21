@@ -201,6 +201,13 @@ def enqueue_unlock(conn, order, bot, *, is_demo=False):
     paid = conn.execute("SELECT id FROM public.transactions WHERE order_id=%s AND status='Captured' AND amount=1000 AND currency='INR' AND is_demo=%s",(order['id'],is_demo)).fetchone()
     if not paid:
         return False
+    if not is_demo:
+        # No background worker, webhook, or API path can bypass verified OTP2.
+        challenge = conn.execute("SELECT consumed_at FROM hostelxpress_private.pickup_otp_challenges "
+                                 "WHERE order_id=%s AND bot_id=%s AND compartment=%s AND consumed_at IS NOT NULL",
+                                 (order['id'],bot['id'],order['compartment_id'])).fetchone()
+        if not challenge:
+            return False
     conn.execute("INSERT INTO hostelxpress_private.command_outbox(order_id,bot_id,compartment,command,is_demo,status) VALUES(%s,%s,%s,'unlock_inner',%s,%s) ON CONFLICT(order_id,command) DO NOTHING",(order['id'],bot['id'],order['compartment_id'],is_demo,'executed' if is_demo else 'pending'))
     if is_demo:
         conn.execute("UPDATE public.bots SET status='UNLOCKED' WHERE id=%s",(bot['id'],))
@@ -271,8 +278,6 @@ def tick(db):
                     releasable = bool(state and state['is_empty'] is True and safe_bot(conn,bot))
                     conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=CASE WHEN %s THEN GREATEST(now(),created_at) ELSE NULL END WHERE id=%s",(releasable,order['id']))
                     event(conn,order['id'],'Failed','Rider no-show after five minutes')
-                if order['status']=='Paid' and not order['is_demo']:
-                    enqueue_unlock(conn,order,bot)
             dispatch(conn,bot['id'])
         # A dispatched bot requeues its unloaded reservations while their rider
         # deadline still runs; without re-reservation such an order could never

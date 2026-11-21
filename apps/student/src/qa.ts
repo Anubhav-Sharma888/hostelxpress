@@ -14,7 +14,7 @@ export const QA_PREVIEW_LABEL = 'QA PREVIEW';
 export const QA_USER: User = {
   id: 'qa-preview-user-0000-0000-0000-000000000000',
   name: 'QA Preview Student',
-  hostel_block: 'C',
+  hostel_block: 'apj-abdul-kalam',
 };
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60000).toISOString();
@@ -25,7 +25,7 @@ const sampleOrder = (over: {
 }): Order => ({
   id: over.id,
   status: over.status,
-  destination_hostel_block: 'C',
+  destination_hostel_block: 'apj-abdul-kalam',
   parcel_label: over.label,
   amount: 1000,
   currency: 'INR',

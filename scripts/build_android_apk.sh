@@ -49,6 +49,8 @@ export HX_ANDROID_LOCAL_QA=$LOCAL_QA
 PUBLIC_ENV=$(cd "$APP_ROOT" && node <<'JS'
 require('@expo/env').loadProjectEnv(process.cwd(), {silent: true});
 process.env.EXPO_PUBLIC_QA_PREVIEW ||= '1';
+// Owner-confirmed public support number; explicit build settings may override it.
+process.env.EXPO_PUBLIC_SUPPORT_PHONE ||= '+919667251210';
 require('./plugins/withAndroidNetwork.cjs').validateBuildUrl(
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000', process.env.HX_ANDROID_LOCAL_QA === '1');
 for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'EXPO_PUBLIC_QA_PREVIEW', 'EXPO_PUBLIC_SUPPORT_PHONE']) {

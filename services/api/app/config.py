@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ''
     razorpay_key_secret: str = ''
     razorpay_webhook_secret: str = ''
+    razorpay_test_only: bool = False  # Isolated pilot: reject live merchant keys
     mqtt_host: str = ''
     mqtt_port: int = 8883
     mqtt_username: str = ''
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
     mqtt_ca_file: str | None = None
     worker_enabled: bool = True
     staging_booking_user_id: UUID | None = None
+    pickup_otp_secret: str = ''  # Backend-only AES-GCM/HMAC key for OTP2 and encrypted OTP1 relay
+    gate_operator_token: str = ''  # Backend-only Gate 2 staff credential, NOT a courier OTP
     trusted_hosts: str = 'localhost,127.0.0.1,[::1],testserver'
 
     @model_validator(mode='after')
@@ -49,8 +52,21 @@ class Settings(BaseSettings):
             parsed = urlparse(self.supabase_url)
             if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.query:
                 raise ValueError('Production requires an HTTPS SUPABASE_URL')
+        if self.razorpay_test_only:
+            if not self.razorpay_configured:
+                raise ValueError('RAZORPAY_TEST_ONLY requires a complete TEST key pair and webhook secret')
+            if not self.razorpay_key_id.startswith('rzp_test_'):
+                raise ValueError('RAZORPAY_TEST_ONLY refuses live or unidentified merchant keys')
+            if self.is_demo or self.staging_booking_user_id:
+                raise ValueError('RAZORPAY_TEST_ONLY requires a separate, real-auth isolated sandbox')
         if self.mqtt_host and (not self.mqtt_username or not self.mqtt_password or not self.mqtt_ingest_username or not self.mqtt_ingest_password):
             raise ValueError('MQTT requires backend credentials; anonymous connections are disabled')
+        if self.pickup_otp_secret and len(self.pickup_otp_secret.encode('utf-8')) < 32:
+            raise ValueError('Pickup OTP2 secret requires at least 32 bytes')
+        if self.gate_operator_token and len(self.gate_operator_token) < 32:
+            raise ValueError('Gate operator token requires at least 32 characters')
+        if (self.pickup_otp_secret or self.gate_operator_token) and (self.is_demo or self.staging_booking_user_id):
+            raise ValueError('Real OTP and gate operations are disabled in demo/restricted staging mode')
         if self.staging_booking_user_id and (
             self.is_demo or self.worker_enabled or self.mqtt_host or self.razorpay_key_id
             or self.razorpay_key_secret or self.razorpay_webhook_secret
@@ -61,6 +77,14 @@ class Settings(BaseSettings):
     @property
     def is_demo(self) -> bool:
         return self.app_env in {'demo','test'}
+
+    @property
+    def pickup_otp_enabled(self) -> bool:
+        return bool(self.pickup_otp_secret)
+
+    @property
+    def gate_operator_enabled(self) -> bool:
+        return bool(self.gate_operator_token)
 
     @property
     def razorpay_configured(self) -> bool:

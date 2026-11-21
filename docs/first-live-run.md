@@ -75,9 +75,9 @@ server-side; the order legitimately stays `Pending`.
 | Payment QR creation | arrived order + Razorpay test credentials and QR support | the QR is a single-use Razorpay object for exactly ₹10 |
 | Webhook confirmation | test-mode webhook at `/webhooks/razorpay` with the matching test webhook secret and `qr_code.credited` enabled | signed server-side capture and QR verification |
 | Live payments | merchant onboarding and live QR activation | use separate live credentials and a separate live webhook after the test passes |
-| Unlock → collection → completion | enrolled rover | payment authorizes the unlock request; only the rover confirms physical unlock |
+| OTP 2 → unlock → collection → completion | enrolled rover, captured ₹10, signed device requests and deployed OTP 2 schema | the student receives a HostelXpress pickup code and enters it on the rover; only verified OTP 2 plus payment can queue the correct inner-lid command; the rover separately confirms execution and safe closure |
 
-Use test credentials to check provider setup and keep real money out of staging.
+Use test credentials to check provider setup and keep real money out of staging. The known merchant TEST account can list QRs but creation was rejected; never repeat creation calls without new permission/capability evidence. OTP 1 / OTP 2 operations remain disabled in the existing restricted staging service unless a separately approved full integration environment is provisioned.
 Razorpay's documentation limits scanning QR Codes to live mode. Use application
 fixtures for the offline QR and capture rehearsal, then verify a controlled live
 scan separately once merchant onboarding and live QR activation are complete.
