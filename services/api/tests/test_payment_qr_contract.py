@@ -235,7 +235,7 @@ def test_authorized_but_not_captured_does_not_show_a_second_payable_qr(payment_a
     env=payment_api
     assert pay(env).status_code==200
     with env['db'].connection() as conn:
-        conn.execute("UPDATE public.transactions SET status='Authorized' WHERE order_id=%s",
+        conn.execute("UPDATE public.transactions SET status='Authorized',razorpay_payment_id='pay_authorized_test_fixture' WHERE order_id=%s",
                      (env['order'],))
     for result in (read_payment(env),pay(env)):
         assert result.status_code==200,result.text
