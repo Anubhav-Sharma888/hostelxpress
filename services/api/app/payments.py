@@ -73,7 +73,7 @@ def response(payment):
 
 def get_payment(conn, order_id, user_id):
     """Read-only, owner-scoped payment lookup. No provider call and no QR creation."""
-    owned = conn.execute('SELECT 1 FROM public.orders WHERE id=%s AND user_id=%s',
+    owned = conn.execute('SELECT status FROM public.orders WHERE id=%s AND user_id=%s',
                          (order_id,user_id)).fetchone()
     if not owned:
         raise HTTPException(404,'Order not found')
@@ -83,7 +83,14 @@ def get_payment(conn, order_id, user_id):
     ).fetchone()
     if not payment:
         raise HTTPException(404,'No payment request for this delivery')
-    return response(payment)
+    view=response(payment)
+    # A QR attached to an order that is no longer awaiting arrival payment
+    # must never be displayed as payable (even if provider TTL remains valid).
+    # A captured/refunded financial fact remains visible for reconciliation.
+    if owned['status']!='Arrived' and view['status']=='pending':
+        view['status']='reconciling'
+        view['qr_image_url']=None
+    return view
 
 
 def create_payment(db, provider, order_id, user_id, is_demo):
@@ -97,7 +104,13 @@ def create_payment(db, provider, order_id, user_id, is_demo):
                 raise HTTPException(409,'Payment creation is pending reconciliation; no second QR was created')
             if existing['expires_at'] and existing['expires_at']<=service.now() and existing['status']=='Pending':
                 raise HTTPException(409,'This QR expired; payment must be reconciled before another QR is issued')
-            return response(existing)
+            view=response(existing)
+            if order['status']!='Arrived' and view['status']=='pending':
+                # A Paid order with an uncaptured payment is inconsistent.
+                # Surface a hold rather than a QR that could cause a duplicate.
+                view['status']='reconciling'
+                view['qr_image_url']=None
+            return view
         expires_at = service.now()+timedelta(minutes=16)
         payment = conn.execute("INSERT INTO public.transactions(order_id,provider_state,is_demo,expires_at) VALUES(%s,'creating',%s,%s) RETURNING *",(order_id,is_demo,expires_at)).fetchone()
         request_id = payment['request_id']

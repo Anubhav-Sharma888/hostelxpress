@@ -254,3 +254,46 @@ def test_expired_payment_status_does_not_return_a_payable_qr_image(payment_api):
     assert result.status_code==200
     assert result.json()['status']=='pending'
     assert result.json()['qr_image_url'] is None
+
+
+def test_failed_order_never_reexposes_a_saved_qr(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),"
+                     "failure_reason='device_fault' WHERE id=%s",(env['order'],))
+    result=read_payment(env)
+    assert result.status_code==200,result.text
+    assert result.json()['status']=='reconciling'
+    assert result.json()['qr_image_url'] is None
+    assert pay(env).status_code==409
+    assert env['provider'].calls==1
+
+
+def test_paid_order_with_unsettled_payment_requires_reconciliation(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.orders SET status='Paid',paid_at=now() WHERE id=%s",
+                     (env['order'],))
+    for result in (read_payment(env),pay(env)):
+        assert result.status_code==200,result.text
+        assert result.json()['status']=='reconciling'
+        assert result.json()['qr_image_url'] is None
+    assert env['provider'].calls==1
+
+
+def test_captured_paid_order_retains_receipt_without_payment_qr(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.orders SET status='Paid',paid_at=now() WHERE id=%s",
+                     (env['order'],))
+        conn.execute("UPDATE public.transactions SET status='Captured',"
+                     "razorpay_payment_id='pay_fixture_captured',captured_at=now() "
+                     "WHERE order_id=%s",(env['order'],))
+    for result in (read_payment(env),pay(env)):
+        assert result.status_code==200,result.text
+        assert result.json()['status']=='paid'
+        assert result.json()['qr_image_url'] is None
+    assert env['provider'].calls==1
