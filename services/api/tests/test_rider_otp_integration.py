@@ -169,3 +169,92 @@ def test_invalid_configuration_never_enables_rider_otp(database_url):
 def test_feature_routes_absent_in_default_demo_mode(client):
     assert client.post(f'/v1/operator/orders/{uuid4()}/rider-otp').status_code==404
     assert client.post(f'/v1/devices/{uuid4()}/rider-otp').status_code==404
+
+
+
+def signed_observation(gate, message_type, **fields):
+    """Simulate signed HTTPS rover traffic, not the physical rover."""
+    path=f"/v1/devices/{gate['bot']}/messages"
+    stamp=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+    payload={
+        'schema_version':1,'message_type':message_type,'message_id':str(uuid4()),
+        'bot_id':str(gate['bot']),'sent_at':stamp,
+        'order_id':str(gate['order']),'compartment':2,
+        **fields,
+    }
+    if message_type=='event':
+        payload['observed_at']=stamp
+    raw=json.dumps(payload,separators=(',',':')).encode()
+    timestamp=str(int(datetime.now(timezone.utc).timestamp()))
+    signature=hmac.new(DEVICE_SECRET,
+        f"{timestamp}.POST.{path}.".encode()+raw,hashlib.sha256).hexdigest()
+    return gate['client'].post(path,content=raw,headers={
+        'Content-Type':'application/json','X-Device-Timestamp':timestamp,
+        'X-Device-Signature':signature,
+    })
+
+
+def test_gate_otp_signed_ack_and_sensor_load_state_machine(gate):
+    """No OTP bypass: queued is not executed and no parcel may load before ACK."""
+    code=issue(gate).json()['code']
+    result=submit(gate,code)
+    assert result.status_code==200,result.text
+    command_id=result.json()['command_id']
+    with gate['db'].connection() as conn:
+        cmd=conn.execute('SELECT status,attempts FROM hostelxpress_private.command_outbox WHERE id=%s',
+                         (command_id,)).fetchone()
+        assert cmd['status']=='pending' and cmd['attempts']==0
+
+    # An attacker or prematurely reporting bot cannot mark a parcel loaded
+    # simply because OTP redemption enqueued a command.
+    fake_loaded=signed_observation(
+        gate,'event',event_type='parcel_loaded',
+        outer_closed=True,inner_closed=True,is_empty=False)
+    assert fake_loaded.status_code==409,fake_loaded.text
+    with gate['db'].connection() as conn:
+        assert conn.execute('SELECT status FROM public.orders WHERE id=%s',
+                            (gate['order'],)).fetchone()['status']=='Pending'
+
+    # Simulate the backend publisher marking the command as sent. This test
+    # only exercises the signed transport/state-machine boundary, not GPIO.
+    with gate['db'].connection() as conn:
+        conn.execute("UPDATE hostelxpress_private.command_outbox "
+                     "SET status='published',attempts=1 WHERE id=%s",(command_id,))
+
+    ack=signed_observation(gate,'ack',command_id=str(command_id),result='executed')
+    assert ack.status_code==200,ack.text
+    with gate['db'].connection() as conn:
+        assert conn.execute('SELECT status FROM hostelxpress_private.command_outbox WHERE id=%s',
+                            (command_id,)).fetchone()['status']=='executed'
+        # A signed execution ACK alone cannot manufacture an opened lid.
+        assert conn.execute('SELECT status FROM public.orders WHERE id=%s',
+                            (gate['order'],)).fetchone()['status']=='Pending'
+
+    opened=signed_observation(gate,'event',event_type='outer_lid_opened',
+                               command_id=str(command_id),outer_closed=False)
+    assert opened.status_code==200,opened.text
+    with gate['db'].connection() as conn:
+        assert conn.execute('SELECT status FROM public.bots WHERE id=%s',
+                            (gate['bot'],)).fetchone()['status']=='LOADING'
+        assert conn.execute('SELECT status FROM public.orders WHERE id=%s',
+                            (gate['order'],)).fetchone()['status']=='Pending'
+
+    closed=signed_observation(gate,'event',event_type='outer_lid_closed',
+                               outer_closed=True)
+    assert closed.status_code==200,closed.text
+    loaded=signed_observation(gate,'event',event_type='parcel_loaded',
+                               outer_closed=True,inner_closed=True,is_empty=False)
+    assert loaded.status_code==200,loaded.text
+
+    with gate['db'].connection() as conn:
+        order=conn.execute('SELECT status,loaded_at FROM public.orders WHERE id=%s',
+                           (gate['order'],)).fetchone()
+        assert order['status']=='Loaded' and order['loaded_at'] is not None
+        assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox "
+                            "WHERE order_id=%s AND command='unlock_outer'",
+                            (gate['order'],)).fetchone()['n']==1
+        assert conn.execute("SELECT count(*) AS n FROM hostelxpress_private.command_outbox "
+                            "WHERE order_id=%s AND command='unlock_inner'",
+                            (gate['order'],)).fetchone()['n']==0
+        assert conn.execute('SELECT count(*) AS n FROM public.transactions WHERE order_id=%s',
+                            (gate['order'],)).fetchone()['n']==0
