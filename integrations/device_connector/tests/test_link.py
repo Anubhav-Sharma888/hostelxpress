@@ -312,6 +312,48 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(self.received, [])
         self.assertEqual(self.calls, [])
 
+
+    def test_courier_otp1_is_display_only_signed_and_never_actuates(self):
+        secret = "test-display-device-secret-at-least-32-chars"
+        calls = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                stamp = self.headers["X-Device-Timestamp"]
+                expected = hmac.new(secret.encode(),
+                    f"{stamp}.POST.{self.path}.".encode()+raw,
+                    hashlib.sha256).hexdigest()
+                calls.append((self.path, json.loads(raw),
+                              hmac.compare_digest(expected,self.headers["X-Device-Signature"])))
+                response=json.dumps({"status":"display_once_only","otp_type":"courier_display_otp1",
+                                     "code":"009831"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type","application/json")
+                self.send_header("Content-Length",str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+            def log_message(self, *args):
+                pass
+        server=ThreadingHTTPServer(("127.0.0.1",0),Handler)
+        thread=threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        try:
+            link=self.link(http_sender=None,api_url=f"http://127.0.0.1:{server.server_port}",
+                           device_secret=secret,allow_loopback_http=True)
+            code=link.pull_courier_code(ORDER,1)
+            self.assertEqual(code,"009831")
+            self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0][0],f"/v1/devices/{BOT}/courier-code/display")
+            self.assertEqual(calls[0][1],{"order_id":ORDER,"compartment":1})
+            self.assertTrue(calls[0][2])
+            self.assertEqual(self.calls,[])  # No actuator callback
+            self.assertEqual(link.pending_events,0)
+            self.assertEqual(link._db.execute("select count(*) from commands").fetchone()[0],0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_insecure_nonlocal_http_is_rejected(self):
         with self.assertRaises(ValueError):
             HostelxpressLink(BOT, self.path, api_url="http://example.invalid", device_secret="a"*40,

@@ -82,27 +82,40 @@ Everything is local and synthetic. Passing this harness still does not establish
 A backend receipt can confirm durable storage while setting `reconciliation_required:true`, for example when an event arrived too late to establish a safe state transition. The connector removes the transport queue item but persistently exposes it in `link.pending_reconciliations`, including the original payload and receipt. An optional `on_reconciliation` callback can alert the team's operator interface. Monitor this list after restart as well as `pending_events`. `acknowledge_reconciliation(message_id)` only marks the local alert handled; it cannot change an order or authorize another physical action. Never interpret a stored observation as a successful unlock or silently replay an expired command.
 
 
-### Gate 2 rider OTP submission (HostelXpress-owned codes)
 
-The backend's opt-in rider OTP flow issues a six-digit code to an authenticated
-Gate 2 operator. Only the assigned, provisioned rover may submit that code to
-the backend. To connect the rover-side keypad/code-entry component, call:
+### Two separate code flows — OTP1 vs OTP2
 
-```python
-receipt = link.submit_rider_otp(order_id, compartment, "003721")
-# "queued_not_executed" means only that the server queued a short-lived command.
-# Await the actual signed MQTT unlock_outer command and local safety guard.
-```
+**OTP1 (courier-provided code, display ONLY):** The student forwards the
+Amazon/Flipkart/other courier's code using the app. The enrolled rover can
+retrieve the code one time using:
 
-The connector signs the exact JSON bytes with the bot's HTTP HMAC credential,
-requires a synchronized clock and HTTPS (or explicit loopback test transport),
-and rejects invalid code shapes before sending. It never stores the code in
-the SQLite event ledger, attempts SMS delivery, invokes the actuator, or
-interprets an HTTP response as physical opening.
+`python
+code_to_display = link.pull_courier_code(order_id, compartment)
+# Show only to the delivery person; clear the screen promptly.
+# This code must NEVER activate a lock, serve as identity proof, or be logged.
+`
 
-A failed network response can be ambiguous: the server might have consumed
-the code and queued the command before the client saw the response. **Do not
-blindly retry or issue another code**. Reconcile the command outbox and
-physical lid state with the operator. Third-party courier-platform OTPs are
-not validated by HostelXpress without a separate approved provider link.
-This opt-in feature is not enabled in the current restricted staging APK/API.
+The backend stores OTP1 encrypted until the assigned rover retrieves it.
+It does not verify the delivery company's OTP or authorize an outer lid.
+Gate staff authorize opening the outer lid through a separate authenticated
+`loading-open` action with physical interlocks.
+
+**OTP2 (HostelXpress pickup code):** The student generates a six-digit
+pickup code in the app only AFTER confirmed arrival and captured ₹10.
+The student enters this OTP2 on the rover screen, and its code-entry
+handler calls:
+
+`python
+receipt = link.submit_pickup_otp(order_id, compartment, entered_otp2)
+# "queued_not_executed" is NOT a physical unlock.
+# Await a correlated server-signed unlock_inner command and local guards.
+`
+
+The connector signs the request and enforces a synchronized clock.
+It does not generate codes, verify money, operate motors, or retry
+ambiguous submissions. A failed HTTP response may mean the OTP2 was
+consumed and an inner command queued; reconcile it before any retry.
+
+Both flows are disabled on the current restricted staging deployment.
+The hardware team remains responsible for the rover screen, physical
+safety interlocks, actuation, ACKs and fresh door/bay telemetry.
