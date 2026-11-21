@@ -7,7 +7,7 @@ The application team supplies the FastAPI service, student application, database
 1. A backend-enrolled bot UUID, per-device HTTP HMAC secret, and independently provisioned TLS MQTT identity restricted to that bot's topics. Never share one credential across the fleet or give a bot permission to publish commands.
 2. The backend HTTPS origin, TLS broker hostname/port and CA trust, and private persistent Linux path for the command/event SQLite ledger.
 3. A local order/compartment assignment source, actual timestamped lid/parcel sensor observations, time-sync health check, and an existing confirmed-unlock function. Unknown assignment/sensors/clock/fault state must keep lids locked.
-4. Agreed arrival conditions and a verified rider-OTP authorization adapter. The connector does not validate delivery-platform OTPs; the supplied architecture identifies that external integration as unconfirmed. A `parcel_loaded` observation cannot bypass missing outer-lid authorization.
+4. Agreed arrival conditions, physical screen/keypad handoff, and separate OTP protocols. **OTP 1** is a courier-provided code that the rover displays once, with no lid-opening effect. **OTP 2** is a HostelXpress code entered by the student at the destination, validated by the backend *after captured ₹10* before queuing the assigned inner lid. An independently authenticated gate-staff action authorizes outer loading. A `parcel_loaded` observation cannot bypass the executed outer-lid command.
 
 Backend credential provisioning and service commands are documented by the backend owner in `services/api/README.md`. Keep generated device secrets out of chat logs, Git, and app bundles. Replace all example UUIDs/hostnames before real enrollment.
 
@@ -37,7 +37,7 @@ A hardware callback returning `True` certifies confirmed execution. An asynchron
 
 ## Failure handling and remaining integration work
 
-The SDK contains no actuator, navigation, camera, or platform-OTP implementation. The hardware team owns mechanical/electrical interlocks and emergency stopping even if the application server is unavailable. Software transport guards are an additional boundary.
+The SDK contains no actuator, navigation, camera, or courier-platform OTP validation implementation. It does provide authenticated display-only OTP 1 retrieval and signed OTP 2 submission entry points for the separate rover screen/keypad team. The hardware team owns mechanical/electrical interlocks and emergency stopping even if the application server is unavailable. Software transport guards are an additional boundary.
 
 Camera ring buffers must preserve the last 120 seconds on fault and retain footage until the handover result is known. A normal cleanup requires captured payment and confirmed lid closure. Private storage/incident evidence upload must be connected and verified separately; an unconfigured backend must reject unsupported evidence operations rather than claim a verified upload.
 
@@ -50,7 +50,7 @@ Demo application mode cannot operate physical integrations. Real device enrollme
 - A correctly signed command with a wrong order, compartment, expired TTL, retained flag, unknown clock, unsafe lid, or active fault never invokes the unlock callback.
 - Duplicate delivery and a crash/restart do not repeat an uncertain physical action.
 - Network loss preserves critical event/ack backlog until a matching durable backend receipt; disconnecting must leave hardware in a safe state.
-- Only an owned, arrived order with verified captured INR 1,000 paise can produce an inner unlock; only correlated physical closure/empty state can release the compartment.
+- Only an owned, arrived order with captured INR 1,000 paise **and an unexpired, single-use, device-submitted pickup OTP 2** can queue an inner unlock; only correlated physical closure/empty state can release the compartment.
 
 Record actual broker, API, and hardware test results separately. Local unit tests and a test broker do not establish production HiveMQ permissions, real payment capture, or physical safety.
 
