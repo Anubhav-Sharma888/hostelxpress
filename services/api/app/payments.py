@@ -59,8 +59,9 @@ def response(payment):
     state = ('refunded' if payment['status']=='Refunded' else
              'paid' if payment['status']=='Captured' else
              'failed' if payment['status']=='Failed' else
-             'reconciling' if payment['provider_state']!='ready' else 'pending')
-    show_qr = state=='pending' and not is_demo
+             'reconciling' if payment['status']=='Authorized' or payment['provider_state']!='ready' else 'pending')
+    show_qr = (state=='pending' and not is_demo and
+               (payment['expires_at'] is None or payment['expires_at']>service.now()))
     return {'order_id':payment['order_id'],'qr_id':payment['razorpay_qr_id'],
             'amount':payment['amount'],'currency':payment['currency'],
             'provider':'demo' if is_demo else 'razorpay',

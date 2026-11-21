@@ -229,3 +229,28 @@ def test_get_payment_terminal_financial_state_without_payable_qr(payment_api,sta
     assert result.json()['status']==expected
     assert result.json()['qr_image_url'] is None
     assert env['provider'].calls==1
+
+
+def test_authorized_but_not_captured_does_not_show_a_second_payable_qr(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.transactions SET status='Authorized' WHERE order_id=%s",
+                     (env['order'],))
+    for result in (read_payment(env),pay(env)):
+        assert result.status_code==200,result.text
+        assert result.json()['status']=='reconciling'
+        assert result.json()['qr_image_url'] is None
+    assert env['provider'].calls==1
+
+
+def test_expired_payment_status_does_not_return_a_payable_qr_image(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.transactions SET expires_at=now()-interval '1 minute' WHERE order_id=%s",
+                     (env['order'],))
+    result=read_payment(env)
+    assert result.status_code==200
+    assert result.json()['status']=='pending'
+    assert result.json()['qr_image_url'] is None
