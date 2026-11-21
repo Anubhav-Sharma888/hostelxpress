@@ -96,27 +96,42 @@ or perform an actual transaction.
 
 From the repository root with the Linux Python environment activated:
 
-\`\`\`bash
+```bash
 PYTHONPATH=services/api python3 -m app.razorpay_readiness
-\`\`\`
+```
 
-Make \`RAZORPAY_KEY_ID\`, \`RAZORPAY_KEY_SECRET\`, and optionally
-\`RAZORPAY_WEBHOOK_SECRET\` available to that process using an approved
+Make `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and optionally
+`RAZORPAY_WEBHOOK_SECRET` available to that process using an approved
 local secret manager or private environment; do not pass actual credentials
 as command-line flags, paste them into ChatGPT, add them to GitHub, or place
 them in the Android app. The readiness probe refuses keys without the
-\`rzp_test_\` prefix **without making any request**. Its sole outbound
-operation is \`GET /v1/payments/qr_codes?count=1\` over HTTPS with HTTP Basic
+`rzp_test_` prefix **without making any request**. Its sole outbound
+operation is `GET /v1/payments/qr_codes?count=1` over HTTPS with HTTP Basic
 Auth. The printed JSON contains only fixed booleans/status codes:
-\`qr_read_api_ok\`, \`authentication_rejected\`,
-\`forbidden_or_product_not_enabled\`, \`provider_rate_limited\`,
-\`network_or_tls_error\`, etc. It never prints the key, secret or provider
+`qr_read_api_ok`, `authentication_rejected`,
+`forbidden_or_product_not_enabled`, `provider_rate_limited`,
+`network_or_tls_error`, etc. It never prints the key, secret or provider
 response body.
 
 **Passing GET is not proof that QR creation is allowed.** Razorpay documents
-\`upi_qr\` as an on-demand feature and QR/UPI-intent payment testing may be
+`upi_qr` as an on-demand feature and QR/UPI-intent payment testing may be
 restricted to Live mode. Do not scan a provider QR with a real UPI app while
 claiming that no money can move. In the current review branch, payment
 webhook tests are replayed against a fake provider and disposable PostgreSQL.
 End-to-end Razorpay integration must be verified in a separately authorized
 payment-test deployment after product capability is confirmed.
+
+## TEST-only server guard
+
+A separate, explicitly approved Razorpay sandbox pilot should set
+`RAZORPAY_TEST_ONLY=true`. Backend startup will refuse partial merchant
+credentials, any non-`rzp_test_` key, demo mode, or the existing restricted
+staging-booking environment. This is a safety guard, **not** permission to
+enable payments on the current free Render staging service.
+
+Before any operator-facing payment rollout, confirm the Test-mode QR
+product is actually available for the merchant, register a distinct
+TEST webhook secret, prove signatures with a real test webhook,
+confirm event/idempotency behavior, and obtain approval for real QR/UPI
+transactions. The safety/financial boundary remains: captured payment
+can authorize a *queued* inner-lid command, not prove physical actuation.
