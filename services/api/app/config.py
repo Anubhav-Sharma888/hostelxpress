@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ''
     razorpay_key_secret: str = ''
     razorpay_webhook_secret: str = ''
+    razorpay_test_only: bool = False  # Isolated pilot: reject live merchant keys
     mqtt_host: str = ''
     mqtt_port: int = 8883
     mqtt_username: str = ''
@@ -51,6 +52,13 @@ class Settings(BaseSettings):
             parsed = urlparse(self.supabase_url)
             if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.query:
                 raise ValueError('Production requires an HTTPS SUPABASE_URL')
+        if self.razorpay_test_only:
+            if not self.razorpay_configured:
+                raise ValueError('RAZORPAY_TEST_ONLY requires a complete TEST key pair and webhook secret')
+            if not self.razorpay_key_id.startswith('rzp_test_'):
+                raise ValueError('RAZORPAY_TEST_ONLY refuses live or unidentified merchant keys')
+            if self.is_demo or self.staging_booking_user_id:
+                raise ValueError('RAZORPAY_TEST_ONLY requires a separate, real-auth isolated sandbox')
         if self.mqtt_host and (not self.mqtt_username or not self.mqtt_password or not self.mqtt_ingest_username or not self.mqtt_ingest_password):
             raise ValueError('MQTT requires backend credentials; anonymous connections are disabled')
         if bool(self.rider_otp_secret) != bool(self.gate_operator_token):

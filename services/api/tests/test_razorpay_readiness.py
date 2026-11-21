@@ -78,3 +78,26 @@ def test_network_error_is_non_fatal_and_does_not_reveal_the_key():
     result=verify_test_account(KEY_ID,KEY_SECRET,transport=httpx.MockTransport(blocked))
     assert result.authentication=="network_or_tls_error"
     assert KEY_SECRET not in repr(result)
+
+
+
+def test_production_server_test_only_mode_rejects_live_or_partial_credentials():
+    from app.config import Settings
+    base={
+        "app_env":"production",
+        "database_url":"host=/tmp dbname=fixture",
+        "supabase_url":"https://example.supabase.co",
+        "worker_enabled":False,
+        "razorpay_test_only":True,
+    }
+    for values in (
+        {"razorpay_key_id":"rzp_live_not_allowed","razorpay_key_secret":KEY_SECRET,"razorpay_webhook_secret":"fixture_webhook"},
+        {"razorpay_key_id":KEY_ID,"razorpay_key_secret":KEY_SECRET},
+        {"razorpay_key_id":KEY_ID,"razorpay_key_secret":KEY_SECRET,"razorpay_webhook_secret":"fixture_webhook",
+         "staging_booking_user_id":"00000000-0000-4000-8000-000000000123"},
+    ):
+        with pytest.raises(ValueError):
+            Settings(**base,**values)
+    valid=Settings(**base,razorpay_key_id=KEY_ID,razorpay_key_secret=KEY_SECRET,
+                   razorpay_webhook_secret="fixture_webhook")
+    assert valid.razorpay_configured and valid.razorpay_test_only
