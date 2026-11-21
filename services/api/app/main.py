@@ -200,6 +200,15 @@ def create_app(settings:Settings | None=None) -> FastAPI:
                 raise HTTPException(404,'Assigned bot not found')
             return service.bot_summary(row)
 
+    @app.get('/v1/orders/{order_id}/payment')
+    def payment_status(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if settings.staging_booking_user_id:
+            # Staging test bookings have no rover or payment grants. Deny
+            # before touching the private payment tables.
+            raise HTTPException(404,'Payment is unavailable for staging test bookings')
+        with request.app.state.db.connection() as conn:
+            return payments.get_payment(conn,order_id,user.id)
+
     @app.post('/v1/orders/{order_id}/payment')
     def payment(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
         if not user.is_demo and not settings.razorpay_configured:

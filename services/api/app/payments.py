@@ -56,13 +56,33 @@ class RazorpayProvider:
 
 def response(payment):
     is_demo = payment['is_demo']
+    state = ('refunded' if payment['status']=='Refunded' else
+             'paid' if payment['status']=='Captured' else
+             'failed' if payment['status']=='Failed' else
+             'reconciling' if payment['provider_state']!='ready' else 'pending')
+    show_qr = state=='pending' and not is_demo
     return {'order_id':payment['order_id'],'qr_id':payment['razorpay_qr_id'],
             'amount':payment['amount'],'currency':payment['currency'],
             'provider':'demo' if is_demo else 'razorpay',
-            'status':'refunded' if payment['status']=='Refunded' else 'paid' if payment['status']=='Captured' else 'pending',
-            'qr_image_url':None if is_demo or payment['status']=='Refunded' else payment['qr_image_url'],
+            'status':state,
+            'qr_image_url':payment['qr_image_url'] if show_qr else None,
             'qr_payload':('HOSTELXPRESS_DEMO_NONPAYABLE:'+str(payment['request_id'])) if is_demo else None,
             'expires_at':payment['expires_at'],'is_demo':is_demo}
+
+
+def get_payment(conn, order_id, user_id):
+    """Read-only, owner-scoped payment lookup. No provider call and no QR creation."""
+    owned = conn.execute('SELECT 1 FROM public.orders WHERE id=%s AND user_id=%s',
+                         (order_id,user_id)).fetchone()
+    if not owned:
+        raise HTTPException(404,'Order not found')
+    payment = conn.execute(
+        'SELECT * FROM public.transactions WHERE order_id=%s '
+        'ORDER BY created_at DESC,id DESC LIMIT 1',(order_id,),
+    ).fetchone()
+    if not payment:
+        raise HTTPException(404,'No payment request for this delivery')
+    return response(payment)
 
 
 def create_payment(db, provider, order_id, user_id, is_demo):
