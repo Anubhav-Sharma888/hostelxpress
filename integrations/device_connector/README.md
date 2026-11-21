@@ -88,11 +88,11 @@ The backend's opt-in rider OTP flow issues a six-digit code to an authenticated
 Gate 2 operator. Only the assigned, provisioned rover may submit that code to
 the backend. To connect the rover-side keypad/code-entry component, call:
 
-\`\`\`python
+```python
 receipt = link.submit_rider_otp(order_id, compartment, "003721")
 # "queued_not_executed" means only that the server queued a short-lived command.
 # Await the actual signed MQTT unlock_outer command and local safety guard.
-\`\`\`
+```
 
 The connector signs the exact JSON bytes with the bot's HTTP HMAC credential,
 requires a synchronized clock and HTTPS (or explicit loopback test transport),

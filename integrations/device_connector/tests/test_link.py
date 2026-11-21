@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import tempfile
 import threading
@@ -302,6 +304,8 @@ class LinkTests(unittest.TestCase):
                 link.submit_rider_otp(ORDER,bay,"123456")
         with self.assertRaises(ValueError):
             link.submit_rider_otp("invalid-id",1,"123456")
+        link.close()
+        self.links.remove(link)
         unsynced = self.link(clock_synchronized=lambda: False)
         with self.assertRaises(ValueError):
             unsynced.submit_rider_otp(ORDER,1,"123456")
