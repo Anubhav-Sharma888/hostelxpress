@@ -143,3 +143,16 @@ def test_different_student_cannot_create_or_view_anothers_payment(payment_api):
     with env['db'].connection() as conn:
         assert conn.execute('SELECT count(*) AS n FROM public.transactions WHERE order_id=%s',
                             (env['order'],)).fetchone()['n']==0
+
+
+def test_refunded_attempt_is_never_misrepresented_as_paid(payment_api):
+    env=payment_api
+    assert pay(env).status_code==200
+    with env['db'].connection() as conn:
+        conn.execute("UPDATE public.transactions SET status='Refunded',razorpay_payment_id='pay_test_refund_contract',"
+                     "captured_at=now() WHERE order_id=%s",(env['order'],))
+    response=pay(env)
+    assert response.status_code==200,response.text
+    assert response.json()['status']=='refunded'
+    assert response.json()['qr_image_url'] is None
+    assert env['provider'].calls==1

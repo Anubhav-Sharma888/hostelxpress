@@ -61,6 +61,7 @@ function DeliveryContent() {
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
   const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
   const alreadyPaid = payment?.status === 'paid';
+  const refunded = payment?.status === 'refunded';
   const next = nextDemoAction(order.status);
   const roverPosition = session?.mode === 'real' ? freshRoverPosition(order.bot, now) : null;
   const destination = hostelName(order.destination_hostel_block);
@@ -81,7 +82,7 @@ function DeliveryContent() {
     setBusy(true);
     setError(null);
     try {
-      const result = await request<Payment>('/v1/orders/' + encodeURIComponent(order.id) + '/payment', session.access_token, {method: 'POST'});
+      const result = await request<Payment>('/v1/orders/' + encodeURIComponent(order.id) + '/payment', session.access_token, {method: 'POST', timeoutMs: 75000});
       setPayment(result);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
@@ -147,7 +148,7 @@ function DeliveryContent() {
           <Icon name="card-outline" color={S.muted} />
           <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>Debit / Campus Card</T><T style={{fontSize: 12, color: S.muted}}>Not available in this release</T></View>
         </View>
-        {payment && !alreadyPaid && <View style={{gap: 12, alignItems: 'center'}}>
+        {payment && !alreadyPaid && !refunded && !expired && <View style={{gap: 12, alignItems: 'center'}}>
           <Label>{payment.provider === 'demo' ? 'Nonpayable demo QR' : 'Secure payment QR'}</Label>
           <View style={{padding: 16, backgroundColor: S.white}}>
             {payment.provider === 'demo' && payment.qr_payload && !/^upi:/i.test(payment.qr_payload)
@@ -165,12 +166,19 @@ function DeliveryContent() {
           <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: '#7F2B00'}}>Automated Unlock</T>
           <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Verified payment authorizes an unlock request. Wait for the rover to confirm your assigned compartment is open.</T>
         </View>
+        {expired && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          This QR has expired. Do not pay it. Contact support so the earlier payment attempt can be reconciled safely.
+        </T>}
+        {refunded && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          This payment was refunded. Do not pay again until HostelXpress support reviews your order.
+        </T>}
         {alreadyPaid && <T accessibilityRole="alert" style={{fontSize: 13, color: S.teal}}>
           Payment is verified. Waiting for the order and rover state to update. Do not pay again.
         </T>}
-        <Button onPress={() => void preparePayment()} loading={busy} disabled={qa || expired || alreadyPaid} icon="flash-outline" testID="payment-create"
-          accessibilityLabel={expired ? 'Payment QR expired; contact support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
-          {expired ? 'QR expired · Get Help' : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
+        <Button onPress={expired || refunded ? help : () => void preparePayment()} loading={busy}
+          disabled={qa || alreadyPaid} icon={expired || refunded ? 'headset-outline' : 'flash-outline'} testID="payment-create"
+          accessibilityLabel={expired || refunded ? 'Contact HostelXpress support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
+          {expired ? 'QR expired · Contact Support' : refunded ? 'Refunded · Contact Support' : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
         </Button>
         {qa && <T style={{fontSize: 12, color: S.muted}}>Offline sample · Payments require the connected backend.</T>}
       </Card>}

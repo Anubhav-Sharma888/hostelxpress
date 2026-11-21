@@ -59,8 +59,8 @@ def response(payment):
     return {'order_id':payment['order_id'],'qr_id':payment['razorpay_qr_id'],
             'amount':payment['amount'],'currency':payment['currency'],
             'provider':'demo' if is_demo else 'razorpay',
-            'status':'paid' if payment['status'] in {'Captured','Refunded'} else 'pending',
-            'qr_image_url':None if is_demo else payment['qr_image_url'],
+            'status':'refunded' if payment['status']=='Refunded' else 'paid' if payment['status']=='Captured' else 'pending',
+            'qr_image_url':None if is_demo or payment['status']=='Refunded' else payment['qr_image_url'],
             'qr_payload':('HOSTELXPRESS_DEMO_NONPAYABLE:'+str(payment['request_id'])) if is_demo else None,
             'expires_at':payment['expires_at'],'is_demo':is_demo}
 

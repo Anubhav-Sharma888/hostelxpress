@@ -127,7 +127,7 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     }
     const current = generation.current;
     const order = await request<Order>('/v1/orders', session.access_token, {
-      method: 'POST', body: {parcel_label: label.trim(), destination_hostel_block: hostel}, idempotencyKey: key,
+      method: 'POST', body: {parcel_label: label.trim(), destination_hostel_block: hostel}, idempotencyKey: key, timeoutMs: 75000,
     });
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your deliveries.');
     upsert(order); void refresh(); return order;
