@@ -15,7 +15,21 @@ The script prints the actual artifact size/hash and verifies its signature and b
 
 The earlier 29 October 2026 artifacts are historical: debug was 250,462,921 bytes, SHA-256 `7df43f7ac371658a58529d2414409c327cd156df7345b6f9fad5e82057c03f84`; the earlier standalone release was 98,449,818 bytes, SHA-256 `278db9d19b1563add4c3cbacbf1096ad12bb5ed36aa2eb8b5ac3b6de35bc1aca`. That release lacked an explicit localhost cleartext exception and is superseded for local-backend QA. The historical debug artifact requires Metro. These hashes do not describe a rebuild containing the new tracked network policy.
 
-Current-source local QA release rebuild: pending; record its actual size/hash and packaged policy after completion.
+Current-source local QA release rebuild: **completed 19 November 2026, 03:50 IST
+(post-refactor, rel4)** — 99,476,506 bytes, SHA-256
+`00d08460ad28701e73fd112c74422f4a1560c232b035864261b12ff7420ca24b`,
+debug-cert signing, bundled `assets/index.android.bundle` (3,572,068 bytes,
+QA-preview branch included, **old joined preview marker string absent** — the
+preview session no longer contains any credential-shaped construction),
+manifest cleartext disabled with the exact-host localhost exception
+(aapt2-verified). This is the artifact representing the publication-ready
+source (session-union refactor + harness fixes). Preserved at
+`.tools/releases/HostelXpress-QA-2026-11-19-postrefactor.apk`, mirrored to
+`C:/Anubhav Sharma/Projects/HoestelXpress/.review/2026-11-19-qa-apk/` together
+with the pre-refactor build (`319378850a5b…8bbe8bd`, superseded for QA use but
+kept for byte-comparison). The QA flag flip re-runs the Hermes bundle (see
+[the 19 November review record](reviews/2026-11-19-overnight-stitch.md));
+QA=1 and QA=0 bundles differ with distinct SHA-256 values.
 
 ## Install and connect the backend
 
@@ -56,6 +70,6 @@ Current-source local QA release rebuild: pending; record its actual size/hash an
 ## Known deferred items (do not fail the build for these)
 
 - Real payment capture (Razorpay activation pending) and physical unlock — demo/wording only
-- Real hostel names, OTP-based rider flow, campus routes — external inputs pending
+- Six actual hostel names were confirmed by the owner on 21 November 2026; see reviews/2026-11-21-campus-hostels.md. Surveyed routes and physical OTP integration remain external inputs.
 - A signup that requires email confirmation now preserves name/hostel as Supabase user metadata and offers them on first sign-in; that path is unit-tested but was never exercised on a live account — verify it if confirmation gets re-enabled
 - Report anything unexpected with a screenshot and the app version to the phase review.

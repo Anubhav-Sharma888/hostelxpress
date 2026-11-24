@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 from contextlib import asynccontextmanager, suppress
 from uuid import UUID,uuid4
@@ -13,11 +14,11 @@ from jwt import PyJWKClient
 from psycopg import Error as DatabaseError
 from psycopg.types.json import Jsonb
 
-from . import payments,pilot,service,throttle
+from . import payments,pilot,service,throttle,pickup_otp_store
 from .auth import Principal,current_user,demo_token,require_local_demo
 from .config import Settings,get_settings
 from .db import Database
-from .models import Booking,DemoAdvance,DemoLogin,ProfilePatch
+from .models import Booking,DemoAdvance,DemoLogin,ProfilePatch,CourierCodeSubmission
 
 log=logging.getLogger('hostelxpress')
 
@@ -74,6 +75,17 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             migrated=conn.execute("SELECT count(*)=3 AS ready FROM hostelxpress_private.schema_migrations WHERE version IN ('0001_application_core','0002_device_reconciliation','0003_after_hours_pilot')").fetchone()['ready']
             if not migrated:
                 raise RuntimeError('Apply all application migrations before starting the API')
+            if not settings.is_demo:
+                safe_commands=conn.execute(
+                    "SELECT count(*)=2 AS ready FROM hostelxpress_private.schema_migrations "
+                    "WHERE version IN ('0004_pickup_and_courier','0005_command_authorization')"
+                ).fetchone()['ready']
+                if not safe_commands:
+                    raise RuntimeError('Apply OTP2 and command authorization migrations before starting the live API')
+            elif settings.pickup_otp_enabled:
+                has_otp_schema=conn.execute("SELECT 1 FROM hostelxpress_private.schema_migrations WHERE version='0004_pickup_and_courier'").fetchone()
+                if not has_otp_schema:
+                    raise RuntimeError('Apply OTP2 and courier relay migration before enabling delivery codes')
             if settings.is_demo:
                 service.ensure_demo(conn)
         bridge=None
@@ -83,6 +95,7 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             bridge.start()
         app.state.mqtt_bridge=bridge
         app.state.device_throttle=throttle.FailureThrottle(limit=30)
+        app.state.operator_throttle=throttle.FailureThrottle(limit=10)
         app.state.webhook_throttle=throttle.FailureThrottle(limit=30)
         warn_unconfigured(settings)
         async def worker():
@@ -123,8 +136,9 @@ def create_app(settings:Settings | None=None) -> FastAPI:
     def health(request:Request):
         with request.app.state.db.connection() as conn:
             conn.execute('SELECT 1')
-        return {'status':'ok','mode':'demo' if settings.is_demo else 'production','database':'ready',
-                'integrations':{'payments':'demo' if settings.is_demo else ('configured' if settings.razorpay_key_id else 'disabled'),
+        mode = 'staging' if settings.staging_booking_user_id else 'demo' if settings.is_demo else 'production'
+        return {'status':'ok','mode':mode,'database':'ready',
+                'integrations':{'payments':'demo' if settings.is_demo else ('configured' if settings.razorpay_configured else 'disabled'),
                                 'mqtt':'configured' if settings.mqtt_host and not settings.is_demo else 'disabled'}}
 
     @app.post('/auth/demo')
@@ -169,8 +183,11 @@ def create_app(settings:Settings | None=None) -> FastAPI:
 
     @app.post('/v1/orders',status_code=201)
     def book(body:Booking,request:Request,idempotency_key:UUID=Header(alias='Idempotency-Key'),user:Principal=Depends(current_user)):
+        staging_user = settings.staging_booking_user_id
+        if staging_user and user.id != staging_user:
+            raise HTTPException(403,'Staging booking is available only to the test account')
         with request.app.state.db.connection() as conn:
-            return service.book(conn,user.id,body,idempotency_key,user.is_demo)
+            return service.book(conn,user.id,body,idempotency_key,user.is_demo,staging=staging_user is not None)
 
     @app.get('/v1/orders/{order_id}')
     def order(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
@@ -190,9 +207,57 @@ def create_app(settings:Settings | None=None) -> FastAPI:
                 raise HTTPException(404,'Assigned bot not found')
             return service.bot_summary(row)
 
+    @app.get('/v1/orders/{order_id}/payment')
+    def payment_status(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if settings.staging_booking_user_id:
+            # Staging test bookings have no rover or payment grants. Deny
+            # before touching the private payment tables.
+            raise HTTPException(404,'Payment is unavailable for staging test bookings')
+        with request.app.state.db.connection() as conn:
+            return payments.get_payment(conn,order_id,user.id)
+
     @app.post('/v1/orders/{order_id}/payment')
     def payment(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if not user.is_demo and not settings.razorpay_configured:
+            raise HTTPException(503,'Payments are not configured yet. Contact HostelXpress support.')
         return payments.create_payment(request.app.state.db,request.app.state.provider,order_id,user.id,user.is_demo)
+
+    @app.post('/v1/operator/orders/{order_id}/loading-open')
+    def authorize_outer_loading(order_id:UUID,request:Request,
+                               operator_token:str | None=Header(default=None,alias='X-Gate-Operator-Key')):
+        # Authenticated staff action, independent from OTP1 and OTP2.
+        if not settings.gate_operator_enabled:
+            raise HTTPException(404,'Gate staff authorization is disabled')
+        if not operator_token or not hmac.compare_digest(operator_token,settings.gate_operator_token):
+            request.app.state.operator_throttle.check(request.client.host if request.client else '')
+            raise HTTPException(401,'Gate operator authentication is required')
+        with request.app.state.db.connection() as conn:
+            return pickup_otp_store.authorize_outer_loading(conn,order_id)
+
+    @app.post('/v1/orders/{order_id}/courier-code')
+    def send_courier_code(order_id:UUID,body:CourierCodeSubmission,request:Request,
+                          user:Principal=Depends(current_user)):
+        if not settings.pickup_otp_enabled or user.is_demo:
+            raise HTTPException(404,'Courier OTP1 relay is unavailable')
+        with request.app.state.db.connection() as conn:
+            return pickup_otp_store.submit_courier_code(
+                conn,order_id,user.id,body.code,settings.pickup_otp_secret.encode())
+
+    @app.get('/v1/orders/{order_id}/pickup-otp')
+    def get_pickup_otp(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if not settings.pickup_otp_enabled or user.is_demo:
+            raise HTTPException(404,'Pickup OTP2 is unavailable')
+        with request.app.state.db.connection() as conn:
+            return pickup_otp_store.get_pickup_code(
+                conn,order_id,user.id,settings.pickup_otp_secret.encode())
+
+    @app.post('/v1/orders/{order_id}/pickup-otp')
+    def issue_pickup_otp(order_id:UUID,request:Request,user:Principal=Depends(current_user)):
+        if not settings.pickup_otp_enabled or user.is_demo:
+            raise HTTPException(404,'Pickup OTP2 is unavailable')
+        with request.app.state.db.connection() as conn:
+            return pickup_otp_store.issue_pickup_code(
+                conn,order_id,user.id,settings.pickup_otp_secret.encode())
 
     @app.post('/v1/demo/orders/{order_id}/advance')
     def advance(order_id:UUID,body:DemoAdvance,request:Request,user:Principal=Depends(current_user)):

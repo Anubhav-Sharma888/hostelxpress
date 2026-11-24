@@ -4,6 +4,7 @@ import {useLocalSearchParams, useRouter} from 'expo-router';
 import {COLORS as C, formatAmount} from '../model';
 import {getItems, getMerchants, payOrder, placeOrder, postQuote, PilotItem, PilotMerchant, PilotQuote, PilotSchedule} from '../pilot';
 import {useApp} from '../state';
+import {hostelName} from '../campus';
 import {Button, Card, ErrorNotice, Heading, Icon, Label, Loading, PageTitle, Pill, T} from '../ui';
 
 const QUOTE_VALID_MS = 10 * 60 * 1000; // the server rejects orders on expired quotes
@@ -12,7 +13,9 @@ const QUOTE_VALID_MS = 10 * 60 * 1000; // the server rejects orders on expired q
 // only from the server quote; the client never computes what a student pays.
 export default function TuckShop() {
   const {session} = useApp();
-  const token = session?.access_token ?? '';
+  // Preview sessions carry no credential field; the QA-preview notice renders
+  // below and an empty token keeps every effect offline.
+  const token = session && session.mode !== 'qa-preview' ? session.access_token : '';
   const router = useRouter();
   const params = useLocalSearchParams<{merchant_id?: string}>();
   const [schedule, setSchedule] = useState<PilotSchedule | null>(null);
@@ -107,7 +110,7 @@ export default function TuckShop() {
   const departure = merchant.departures[0];
   return <View style={{gap: 20}}>
     <PageTitle eyebrow={merchant.kind === 'hot_food' ? 'After-hours hot food' : 'Tuck Shop Express'} title={merchant.name}
-      description={`Batched delivery to ${departure?.hostel_block ?? merchant.hostel_block} block.`}
+      description={`Batched delivery to ${hostelName(departure?.hostel_block ?? merchant.hostel_block)}.`}
       action={merchant.insulated_bay ? <Pill tone="green" icon="albums-outline">{merchant.insulated_bay + ' · Insulated'}</Pill> : undefined} />
     <Card style={{backgroundColor: C.dark, borderColor: C.dark, padding: 0, overflow: 'hidden'}}>
       <View style={{flexDirection: 'row', alignItems: 'center', gap: 18, padding: 20}}>
@@ -136,7 +139,7 @@ export default function TuckShop() {
       {departure && <Card style={{padding: 20, gap: 9, backgroundColor: C.lavender, borderColor: C.lavender}}>
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
           <Icon name="time-outline" size={16} />
-          <T style={{fontFamily: 'DMSansBold', fontSize: 13}}>Departure {departure.window_start.slice(11, 16)}–{departure.window_end.slice(11, 16)} to {departure.hostel_block}</T>
+          <T style={{fontFamily: 'DMSansBold', fontSize: 13}}>Departure {departure.window_start.slice(11, 16)}–{departure.window_end.slice(11, 16)} to {hostelName(departure.hostel_block)}</T>
         </View>
         <View style={{flexDirection: 'row', gap: 10}}>
           <View style={{flex: 1, padding: 14, borderRadius: 10, backgroundColor: C.white, gap: 7}}>

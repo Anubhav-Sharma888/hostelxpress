@@ -1,21 +1,25 @@
 import React, {useState} from 'react';
 import {Linking, Pressable, View} from 'react-native';
+import {router} from 'expo-router';
 import {AUTH_MODE} from '../api';
 import {COLORS as C} from '../model';
 import {Card, Heading, Icon, Label, PageTitle, T} from '../ui';
+
+const supportPhone = process.env.EXPO_PUBLIC_SUPPORT_PHONE?.trim() ?? '';
+const hasSupportPhone = /^\+[1-9]\d{7,14}$/.test(supportPhone);
 
 const items: {q: string; a: string; aReal?: string; tag: string}[] = [
   {
     q: 'Rover arrived but compartment latch hasn’t released?',
     tag: 'HARDWARE LOCK',
-    a: 'Keep the compartment closed. Payment confirmation and physical latch release are separate hardware events. The rover acknowledges unlock over optical/hall-effect sensors. If the lid does not pop open within 15 seconds of confirmed payment, tap the Gate 2 radio line below.',
-    aReal: 'Keep the compartment closed. Payment confirmation and physical latch release are separate events. Wait for a fresh device acknowledgement over the authenticated connector.',
+    a: 'Keep the compartment closed. Payment confirmation and physical latch release are separate hardware events. The rover acknowledges unlock over optical/hall-effect sensors. If the lid does not pop open within 15 seconds of confirmed payment, call HostelXpress support.',
+    aReal: 'Keep the compartment closed. Payment confirmation and physical latch release are separate events. Wait for the order screen to confirm that your bay is open. If it stays closed, call HostelXpress support.',
   },
   {
     q: 'When do I pay the ₹10 fee?',
     tag: 'PAYMENT',
     a: 'Pay only after the parcel arrives. In the current demo the QR is nonpayable, and the explicitly labelled simulation records a test payment. A live delivery must use a verified Razorpay payment before the backend requests an unlock.',
-    aReal: 'Pay only after the parcel arrives. Your payment is verified through Razorpay before the backend requests an unlock.',
+    aReal: 'Pay only after the parcel arrives. Your Razorpay payment and HostelXpress pickup OTP 2 must both be verified before the backend authorizes your assigned inner lid.',
   },
   {
     q: 'Why does tracking say “Telemetry stale”?',
@@ -42,126 +46,65 @@ const items: {q: string; a: string; aReal?: string; tag: string}[] = [
 
 export default function Help() {
   const [open, setOpen] = useState<number | null>(0);
-  const [probeActive, setProbeActive] = useState(false);
+  const [dialError, setDialError] = useState(false);
 
   return (
     <View style={{gap: 20}}>
       <PageTitle
-        eyebrow="Campus Rover Support"
-        title="Diagnostic & Help Desk"
-        description="Live fleet telemetry status, instant operator line, and hardware troubleshooting."
+        eyebrow="HostelXpress support"
+        title="Help & History"
+        description="Call the support team, browse your past deliveries, or find answers to common questions."
       />
 
-      {/* Stitch System Status Banner */}
-      <Card style={{padding: 16, borderRadius: 14}}>
-        <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 200, flex: 1}}>
-            <View style={{position: 'relative', width: 28, height: 28, borderRadius: 14, backgroundColor: '#DDF4C5', alignItems: 'center', justifyContent: 'center'}}>
-              <View style={{width: 10, height: 10, borderRadius: 5, backgroundColor: C.lime}} />
-            </View>
-            <View>
-              <Heading style={{fontSize: 16, lineHeight: 22}}>Fleet Telemetry Active</Heading>
-              <View style={{flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1}}>
-                <Icon name="checkmark-circle" size={14} color={C.primary} />
-                <T style={{fontSize: 11, fontFamily: 'DMSansBold', color: C.primary}}>All campus rovers operating normally</T>
-              </View>
-            </View>
-          </View>
-          <View style={{backgroundColor: C.pale, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignItems: 'center'}}>
-            <Label style={{fontSize: 8, color: C.muted}}>Gate 2 Ping</Label>
-            <T style={{fontSize: 12, fontFamily: 'DMSansBold', color: C.ink}}>14 ms</T>
-          </View>
-        </View>
-      </Card>
-
-      {/* Stitch Priority Emergency / Direct Dispatch Actions (2 Cards) */}
       <View style={{flexDirection: 'row', gap: 14, flexWrap: 'wrap'}}>
-        {/* Gate 2 Post Direct Radio Line */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Call Gate 2 Post Radio Line"
-          onPress={() => Linking.openURL('tel:+919876543210').catch(() => undefined)}
-          style={({pressed}) => [{
+          accessibilityLabel="Call HostelXpress support"
+          accessibilityState={{disabled: !hasSupportPhone}}
+          disabled={!hasSupportPhone}
+          onPress={() => {
+            setDialError(false);
+            void Linking.openURL('tel:' + supportPhone).catch(() => setDialError(true));
+          }}
+          style={({pressed}) => ({
             flex: 1,
             minWidth: 240,
             borderRadius: 14,
             backgroundColor: C.dark,
             padding: 18,
-            gap: 16,
+            gap: 12,
             opacity: pressed ? 0.85 : 1,
-            shadowColor: '#141B2B',
-            shadowOffset: {width: 0, height: 4},
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-          }]}
+          })}
         >
-          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-            <View style={{width: 38, height: 38, borderRadius: 10, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center'}}>
-              <Icon name="call" size={20} color={C.orange} />
-            </View>
-            <View style={{paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.orange}}>
-              <T style={{fontFamily: 'DMSansBold', fontSize: 9, color: '#102000', letterSpacing: 0.8}}>SOS 24/7</T>
-            </View>
-          </View>
+          <Icon name="call" size={22} color={C.orange} />
           <View>
-            <Heading style={{fontSize: 18, lineHeight: 24, color: '#FFFFFF'}}>Gate 2 Security Post</Heading>
-            <T style={{fontSize: 12, color: '#C4C1FB', marginTop: 2}}>Direct Security Deck Radio Line</T>
+            <Heading style={{fontSize: 18, lineHeight: 24, color: C.white}}>HostelXpress support</Heading>
+            <T style={{fontSize: 12, color: C.lavender, marginTop: 2}}>
+              {hasSupportPhone ? supportPhone : 'Support phone unavailable in this build'}
+            </T>
+            {dialError && <T accessibilityRole="alert" style={{fontSize: 12, color: C.lavender}}>Open your phone app to call this number.</T>}
           </View>
         </Pressable>
-
-        {/* AI Dispatcher Diagnostic Probe */}
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Telemetry Diagnostic Probe"
-          onPress={() => setProbeActive(!probeActive)}
-          style={({pressed}) => [{
+          accessibilityRole="link"
+          onPress={() => router.push('/history')}
+          style={({pressed}) => ({
             flex: 1,
             minWidth: 240,
             borderRadius: 14,
-            backgroundColor: C.lime,
+            backgroundColor: C.pale,
             padding: 18,
-            gap: 16,
+            gap: 12,
             opacity: pressed ? 0.85 : 1,
-            shadowColor: '#84CC16',
-            shadowOffset: {width: 0, height: 4},
-            shadowOpacity: 0.2,
-            shadowRadius: 8,
-          }]}
+          })}
         >
-          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-            <View style={{width: 38, height: 38, borderRadius: 10, backgroundColor: '#65A30D', alignItems: 'center', justifyContent: 'center'}}>
-              <Icon name="hardware-chip" size={20} color={C.onLime} />
-            </View>
-            <View style={{paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.dark}}>
-              <T style={{fontFamily: 'DMSansBold', fontSize: 9, color: C.lime, letterSpacing: 0.8}}>LIVE BOT</T>
-            </View>
-          </View>
+          <Icon name="receipt-outline" size={22} color={C.primary} />
           <View>
-            <Heading style={{fontSize: 18, lineHeight: 24, color: C.onLime}}>AI Dispatcher</Heading>
-            <T style={{fontSize: 12, color: C.onLime, marginTop: 2}}>Sensor Diagnostics & Latch Probe</T>
+            <Heading style={{fontSize: 18, lineHeight: 24}}>Delivery history</Heading>
+            <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>Review completed and failed deliveries.</T>
           </View>
         </Pressable>
       </View>
-
-      {/* Interactive Telemetry Diagnostic Probe Box */}
-      {probeActive && (
-        <Card style={{padding: 18, borderRadius: 14, backgroundColor: '#E1E8FD', gap: 10}}>
-          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-            <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
-              <Icon name="pulse-outline" size={18} color={C.primary} />
-              <Heading style={{fontSize: 15, lineHeight: 20}}>Telemetry Diagnostic Probe</Heading>
-            </View>
-            <Pressable onPress={() => setProbeActive(false)} style={{padding: 4}}>
-              <Icon name="close-circle-outline" size={18} color={C.muted} />
-            </Pressable>
-          </View>
-          <View style={{backgroundColor: C.white, borderRadius: 8, padding: 12, gap: 4}}>
-            <T style={{fontFamily: 'DMSansBold', fontSize: 11, color: C.primary}}>[Rover #04-Vanguard Telemetry Stream]</T>
-            <T style={{fontSize: 11, color: C.muted}}>LiDAR Grid: CLEAR · 4G LTE Ping: -58dBm</T>
-            <T style={{fontSize: 11, color: C.muted}}>Compartment Solenoid Bays 1–3: ARMED &amp; HEALTHY</T>
-          </View>
-        </Card>
-      )}
 
       {/* Frequently Asked Troubleshooting Accordion */}
       <View style={{gap: 12}}>

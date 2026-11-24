@@ -70,6 +70,17 @@ create table if not exists public.pilot_orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- Pilot data and merchant tokens are accessed through FastAPI only.
+alter table public.pilot_schedule enable row level security;
+alter table public.pilot_merchants enable row level security;
+alter table public.pilot_items enable row level security;
+alter table public.pilot_departures enable row level security;
+alter table public.pilot_quotes enable row level security;
+alter table public.pilot_orders enable row level security;
+revoke all on public.pilot_schedule, public.pilot_merchants, public.pilot_items,
+  public.pilot_departures, public.pilot_quotes, public.pilot_orders
+  from public, anon, authenticated;
+
 create index if not exists pilot_orders_departure_idx on public.pilot_orders (departure_id) where status not in ('Rejected','Cancelled');
 create trigger pilot_orders_touch_updated_at before update on public.pilot_orders
   for each row execute function hostelxpress_private.touch_updated_at();

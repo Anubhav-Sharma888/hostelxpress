@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Pressable, TextInput, useWindowDimensions, View} from 'react-native';
 import {router, useLocalSearchParams} from 'expo-router';
 import {AUTH_MODE} from '../api';
+import {DEFAULT_HOSTEL, hostelName, isCampusHostel} from '../campus';
 import {HostelPicker} from '../components/HostelPicker';
 import {COLORS as C} from '../model';
 import {useApp} from '../state';
@@ -14,7 +15,7 @@ export default function Profile() {
   const {edit} = useLocalSearchParams<{edit?: string}>();
   const [editing, setEditing] = useState(edit === '1');
   const [name, setName] = useState(user?.name || '');
-  const [hostel, setHostel] = useState(user?.hostel_block || 'C');
+  const [hostel, setHostel] = useState(user?.hostel_block || DEFAULT_HOSTEL);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -22,7 +23,7 @@ export default function Profile() {
   const completedCount = orders.filter(order => order.status === 'Completed').length;
 
   async function save() {
-    if (busy || !name.trim()) return;
+    if (busy || !name.trim() || !isCampusHostel(hostel)) return;
     setBusy(true);
     setError(null);
     try {
@@ -38,7 +39,7 @@ export default function Profile() {
 
   function cancel() {
     setName(user?.name || '');
-    setHostel(user?.hostel_block || 'C');
+    setHostel(user?.hostel_block || DEFAULT_HOSTEL);
     setError(null);
     setSaved(false);
     setEditing(false);
@@ -72,7 +73,7 @@ export default function Profile() {
                   <Heading style={{fontSize: 20, lineHeight: 28, letterSpacing: -0.4}}>{user?.name}</Heading>
                   <T style={{fontSize: 11, color: C.muted}}>Student ID: 2022-CS-084</T>
                   <T style={{fontSize: 10, color: C.primary, marginTop: 1}}>
-                    {user?.hostel_block ? 'Hostel Block ' + user.hostel_block + ' Resident' : 'Hostel not configured'}
+                    {user?.hostel_block ? hostelName(user.hostel_block) + ' resident' : 'Hostel not configured'}
                   </T>
                 </View>
               </View>
@@ -155,7 +156,7 @@ export default function Profile() {
                       style={[common.input, {marginTop: 6}]}
                     />
                   </View>
-                  <HostelPicker hostel={hostel} setHostel={setHostel} note="Select your primary hostel block (A–G)." />
+                  <HostelPicker hostel={hostel} setHostel={setHostel} note="Choose your current campus hostel." />
                   {error && <ErrorNotice message={error} />}
                   <View style={[common.row, {flexWrap: 'wrap'}]}>
                     <Button
@@ -163,7 +164,7 @@ export default function Profile() {
                       icon="checkmark-outline"
                       onPress={() => void save()}
                       loading={busy}
-                      disabled={!name.trim()}
+                      disabled={!name.trim() || !isCampusHostel(hostel)}
                       testID="profile-save"
                       accessibilityLabel="Save changes"
                     >
@@ -178,8 +179,8 @@ export default function Profile() {
                 <View style={{backgroundColor: C.pale, borderRadius: 10, padding: 14, gap: 10}}>
                   <View style={common.between}>
                     <T style={{fontSize: 12, color: C.muted}}>Default Destination Drop</T>
-                    <T style={{fontFamily: 'DMSansBold', fontSize: 13}}>
-                      {user?.hostel_block ? 'Hostel Block ' + user.hostel_block + ' Porch' : 'Not configured'}
+                    <T style={{fontFamily: 'DMSansBold', fontSize: 13, flex: 1, textAlign: 'right'}}>
+                      {user?.hostel_block ? hostelName(user.hostel_block) + ' porch' : 'Not configured'}
                     </T>
                   </View>
                   <View style={common.between}>

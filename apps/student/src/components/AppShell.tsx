@@ -1,15 +1,16 @@
-import React, {useEffect, useRef} from 'react';
+import React, {ComponentProps, useEffect, useRef} from 'react';
 import {Pressable, ScrollView, useWindowDimensions, View} from 'react-native';
 import {router, Slot, usePathname} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import {COLORS as C, isActive} from '../model';
 import {useApp} from '../state';
-import {Icon, IconName, T} from '../ui';
+import {Icon, T} from '../ui';
 
-const links: {path:'/'|'/tracking'|'/deliveries';label:string;icon:IconName}[] = [
-  {path:'/',label:'Deliveries',icon:'car-outline'},
-  {path:'/tracking',label:'Active Orders',icon:'radio-outline'},
-  {path:'/deliveries',label:'Help & History',icon:'time-outline'},
+const links: {path:'/'|'/deliveries'|'/help';label:string;icon:ComponentProps<typeof MaterialCommunityIcons>['name']}[] = [
+  {path:'/',label:'Deliveries',icon:'truck-delivery-outline'},
+  {path:'/deliveries',label:'Active Orders',icon:'access-point'},
+  {path:'/help',label:'Help & History',icon:'history'},
 ];
 export function Wordmark({light=false,small=false,subtitle='Gate 2 Campus Hub'}:{light?:boolean;small?:boolean;subtitle?:string}) {
   return <View style={{flexDirection:'row',alignItems:'center',gap:8,flexShrink:1}}>
@@ -37,17 +38,32 @@ export function AppShell() {
     if (session && path==='/sign-in') router.replace('/');
   },[session,path]);
   if (path==='/sign-in' || !session) return <Slot/>;
-  const selected = (target:string) => target==='/'?path==='/':target==='/tracking'?path.startsWith('/order')||path==='/tracking':path==='/deliveries'||path==='/help';
+  const segments = path.split('/').filter(Boolean);
+  const shownOrder = segments[0]==='order' && segments[1] ? orders.find(item=>item.id===decodeURIComponent(segments[1])) : undefined;
+  const handover = !!shownOrder && ['Arrived','Paid','Completed'].includes(shownOrder.status);
+  const orderTitle = session.mode==='real' && shownOrder?.is_demo ? 'Test booking' : handover ? 'Locker Pin Pickup' : 'Rover Live Tracking';
+  const historyOrder = !!shownOrder && !isActive(shownOrder);
+  const selected = (target:string) => {
+    if (target==='/deliveries') return path==='/deliveries'||(segments[0]==='order'&&!historyOrder);
+    if (target==='/help') return path==='/help'||path==='/history'||historyOrder;
+    return path==='/';
+  };
   function navigate(target:typeof links[number]['path']) {
-    if (target==='/tracking') {
+    if (target==='/deliveries') {
       const order=orders.find(isActive);
       if (order) router.push({pathname:'/order/[id]',params:{id:order.id}});
-      else router.push('/deliveries');
+      else router.push({pathname:'/deliveries',params:{view:'active'}});
     } else router.push(target);
   }
   return <View style={{flex:1,backgroundColor:C.canvas}}>
     <View style={{minHeight:64+insets.top,paddingTop:insets.top,paddingHorizontal:16,backgroundColor:C.canvas,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:4,borderBottomWidth:1,borderBottomColor:'#EEF0F8'}}>
-      <Wordmark small={!desktop}/>
+      {segments[0]==='order' ? <View style={{flexDirection:'row',alignItems:'center',gap:2,flexShrink:1}}>
+        <Pressable accessibilityRole="button" accessibilityLabel={historyOrder?'Back to delivery history':'Back to active orders'} onPress={()=>router.push(historyOrder?'/history':{pathname:'/deliveries',params:{view:'active'}})}
+          style={{minWidth:48,minHeight:48,alignItems:'center',justifyContent:'center',marginLeft:-10}}>
+          <Icon name="arrow-back-outline" size={23} color={C.ink}/>
+        </Pressable>
+        <T style={{fontFamily:'ManropeBold',fontSize:19,lineHeight:26,letterSpacing:-.5,color:C.ink}}>{orderTitle}</T>
+      </View> : <Wordmark small={!desktop}/>}
       {desktop && <View style={{flexDirection:'row',gap:12}}>{links.map(item=><Pressable key={item.path} accessibilityRole="link" onPress={()=>navigate(item.path)} style={{minHeight:48,justifyContent:'center',paddingHorizontal:16}}><T style={{fontFamily:'DMSansBold',color:selected(item.path)?C.primary:C.muted}}>{item.label}</T></Pressable>)}</View>}
       <View style={{flexDirection:'row',alignItems:'center'}}>
         <Pressable accessibilityRole="button" accessibilityLabel="Notifications and alerts" onPress={()=>router.push('/deliveries')} style={{minWidth:48,minHeight:48,alignItems:'center',justifyContent:'center'}}><Icon name="notifications-outline" color={C.muted} size={23}/></Pressable>
@@ -64,7 +80,7 @@ export function AppShell() {
     {!desktop && <View style={{flexDirection:'row',paddingBottom:insets.bottom,minHeight:64+insets.bottom,backgroundColor:C.canvas,borderTopWidth:1,borderTopColor:'#EEF0F8'}}>
       {links.map(item=><Pressable key={item.path} accessibilityRole="link" accessibilityLabel={item.label} accessibilityState={{selected:selected(item.path)}} onPress={()=>navigate(item.path)}
         style={{flex:1,minHeight:64,alignItems:'center',justifyContent:'center',gap:5}}>
-        <Icon name={item.icon} color={selected(item.path)?C.primary:C.muted} size={23}/>
+        <MaterialCommunityIcons name={item.icon} color={selected(item.path)?C.primary:C.muted} size={23}/>
         <T style={{fontSize:11,lineHeight:16,color:selected(item.path)?C.primary:C.muted,fontFamily:'DMSansBold'}}>{item.label}</T>
       </Pressable>)}
     </View>}

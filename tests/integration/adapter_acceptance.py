@@ -82,7 +82,9 @@ def acceptance():
     os.umask(0o077)
     tools = ROOT / ".tools"
     tools.mkdir(exist_ok=True)
-    private = Path(tempfile.mkdtemp(prefix="adapter-acceptance-", dir=tools))
+    private = Path(tempfile.mkdtemp(prefix="hx-adapter-"))
+    owned_private = private.resolve()
+    private_parent = Path(tempfile.gettempdir()).resolve()
     pg_started, broker, server, server_thread, links = False, None, None, None, []
     observer = None
     previous_env = {}
@@ -150,6 +152,9 @@ def acceptance():
              "-CAkey", str(private / "ca.key"), "-CAcreateserial", "-out", str(private / "server.crt"),
              "-days", "1", "-extfile", str(private / "server.extensions")])
         config = private / "mosquitto.conf"
+        # Same containment guard as mqtt_tls_proof: the broker config stays inside
+        # the harness directory and references only harness-local secrets.
+        assert private.resolve() in config.resolve().parents, "broker config must stay inside the harness directory"
         config.write_text("per_listener_settings true\nlistener " + str(MQTT_PORT) + " 127.0.0.1\nallow_anonymous false\npassword_file " + str(passwords) + "\nacl_file " + str(private / "broker.acl") + "\ncafile " + str(private / "ca.crt") + "\ncertfile " + str(private / "server.crt") + "\nkeyfile " + str(private / "server.key") + "\ntls_version tlsv1.2\npersistence false\nlog_type error\n")
         with open(private / "broker.log", "w", encoding="utf-8") as log:
             broker = subprocess.Popen(["mosquitto", "-c", str(config)], stdout=log, stderr=subprocess.STDOUT)
@@ -193,16 +198,22 @@ def acceptance():
         import uvicorn
         from app.config import Settings
         from app.main import create_app
+        from app.auth import Principal, current_user
         import paho.mqtt.client as mqtt
         import hostelxpress_link.link as link_module
         from hostelxpress_link import BrokerConfig, HostelxpressLink
 
+        pickup_secret = secrets.token_urlsafe(48)
         settings = Settings(app_env="production", database_url=db_url, supabase_url="https://acceptance.invalid",
+                            pickup_otp_secret=pickup_secret,
                             worker_enabled=True, mqtt_host="localhost", mqtt_port=MQTT_PORT,
                             mqtt_ca_file=str(private / "ca.crt"), mqtt_username=pub_user, mqtt_password=pub_credential,
-                            mqtt_ingest_username=ingest_user, mqtt_ingest_credential=ingest_credential,
+                            mqtt_ingest_username=ingest_user, mqtt_ingest_password=ingest_credential,
                             mqtt_ingest_client_id="acceptance-ingest-" + uuid.uuid4().hex, trusted_hosts="127.0.0.1,localhost")
         app = create_app(settings)
+        # Only the synthetic student identity is supplied locally; issue and
+        # redeem still use the real owner-scoped and signed-device endpoints.
+        app.dependency_overrides[current_user] = lambda: Principal(user_id, False)
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=HTTP_PORT, access_log=False, log_config=None, log_level="warning"))
         server_thread = threading.Thread(target=server.run, daemon=True, name="adapter-acceptance-api")
         server_thread.start()
@@ -232,7 +243,7 @@ def acceptance():
         def device(now=None, ledger_path=None):
             link = HostelxpressLink(str(bot_id), ledger_path or ledger,
                                     broker=BrokerConfig(host="localhost", port=MQTT_PORT, username=bot_user, password=bot_credential, ca_file=str(private / "ca.crt")),
-                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_credential=device_credential,
+                                    api_url="http://127.0.0.1:" + str(HTTP_PORT), device_secret=device_credential,
                                     allow_loopback_http=True, guard=guard, on_unlock=on_unlock,
                                     clock_synchronized=lambda: True, now=now)
             links.append(link)
@@ -275,6 +286,9 @@ def acceptance():
             signature = hmac.new(device_credential.encode(), stamp.encode() + b".POST." + path.encode() + b"." + raw, hashlib.sha256).hexdigest()
             request = Request("http://127.0.0.1:" + str(HTTP_PORT) + path, data=raw, method="POST",
                               headers={"Content-Type": "application/json", "X-Device-Timestamp": stamp, "X-Device-Signature": signature})
+            # Same loopback guard as mqtt_tls_proof: the signed-device transport
+            # proof targets the harness-local API only.
+            assert request.full_url.startswith("http://127.0.0.1:"), "the transport proof must target the local harness API only"
             with urlopen(request, timeout=5) as response:
                 receipt = json.loads(response.read(65537))
             receipts.append(receipt)
@@ -297,8 +311,33 @@ def acceptance():
         assert one("SELECT count(*) AS n FROM hostelxpress_private.device_events WHERE bot_id=%s AND (payload->>'message_id')=%s", (bot_id, arrived_id))["n"] == 1, "duplicate delivery stored a second row"
         link._http = HostelxpressLink._http.__get__(link)
 
-        # Uncertain execution on order1: asynchronous unlock, crash, restart.
-        command1_id = str(wait_for(lambda: (first("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner'", (order1_id,)) or {}).get("id"), "worker-created durable unlock command for order1"))
+        def authorize_pickup(order_id, compartment, battery):
+            assert not query("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s",
+                             (order_id,)), "captured payment alone must not create an unlock"
+            # Arrival/ACK/partial lid events cannot supply a complete snapshot.
+            link.report_telemetry(current_lat=None, current_lng=None, battery_level=battery,
+                compartments=[{"compartment": n, "outer_closed": True, "inner_closed": True,
+                               "is_empty": n == 3} for n in (1, 2, 3)],clock_synchronized=True)
+            wait_for(lambda: one("SELECT battery_level FROM public.bots WHERE id=%s",
+                                 (bot_id,))["battery_level"] == battery, "fresh full pickup sensors persisted")
+            path = "/v1/orders/" + str(order_id) + "/pickup-otp"
+            request = Request("http://127.0.0.1:" + str(HTTP_PORT) + path,data=b"",method="POST")
+            assert request.full_url.startswith("http://127.0.0.1:")
+            with urlopen(request,timeout=5) as response:
+                issued = json.loads(response.read(65537))
+            assert issued["otp_type"] == "student_pickup_otp2"
+            result = link.submit_pickup_otp(str(order_id),compartment,issued["code"])
+            assert result["accepted"] is True and result["status"] == "queued_not_executed"
+            saved = one("SELECT consumed_at,code_ciphertext FROM hostelxpress_private.pickup_otp_challenges "
+                        "WHERE order_id=%s",(order_id,))
+            assert saved["consumed_at"] is not None and saved["code_ciphertext"] is None
+            return result["command_id"]
+
+        # Uncertain execution on order1: signed OTP2 redemption queues the
+        # command, then asynchronous unlock, crash and restart are unchanged.
+        authorized1 = authorize_pickup(order1_id,1,89)
+        command1_id = str(wait_for(lambda: (first("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner'", (order1_id,)) or {}).get("id"), "OTP2-created durable unlock command for order1"))
+        assert command1_id == authorized1
         def matching_command_bytes():
             for raw in command_observations:
                 try:
@@ -333,17 +372,17 @@ def acceptance():
         assert not query("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s", (order2_id,)), "unlock created without arrival and telemetry"
         assert one("SELECT status FROM public.orders WHERE id=%s", (order2_id,))["status"] == "Pending"
 
-        # Clean execution on order3: pay it, then the worker's unlock executes
-        # synchronously and the correlated closure with an empty reading completes.
+        # Clean execution on order3: capture plus signed OTP2 redemption,
+        # then correlated closure with a full physical snapshot completes.
         with psycopg.connect(db_url) as conn:
             conn.execute("INSERT INTO public.transactions(order_id,razorpay_qr_id,razorpay_payment_id,status,captured_at,is_demo) VALUES(%s,%s,%s,'Captured',now(),false)", (order3_id, "qr_fixture_" + uuid.uuid4().hex, "pay_fixture_" + uuid.uuid4().hex))
             conn.execute("UPDATE public.orders SET status='Paid',paid_at=now() WHERE id=%s", (order3_id,))
-        link.report_telemetry(current_lat=None, current_lng=None, battery_level=87,
-                              compartments=[{"compartment": n, "outer_closed": True, "inner_closed": True, "is_empty": n == 3} for n in (1, 2, 3)],
-                              clock_synchronized=True)
+        authorized3 = authorize_pickup(order3_id,2,87)
         command3_id = str(wait_for(lambda: (first("SELECT id FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner' AND status='executed'", (order3_id,)) or {}).get("id"), "clean unlock for order3 executed end to end"))
+        assert command3_id == authorized3
         assert actuator_count[0] == 2, "clean unlock did not actuate exactly once more"
-        link.report_lid_event(str(order3_id), 2, lid="inner", closed=True, command_id=command3_id, is_empty=True)
+        link.report_lid_event(str(order3_id), 2, lid="inner", closed=True, command_id=command3_id,
+                              outer_closed=True, inner_closed=True, is_empty=True)
         wait_for(lambda: one("SELECT status FROM public.orders WHERE id=%s", (order3_id,))["status"] == "Completed", "correlated closure and empty reading complete the order")
         assert not link.pending_reconciliations, "clean completion must not require reconciliation"
         assert actuator_count[0] == 2, "completion path re-actuated a compartment"
@@ -429,8 +468,9 @@ def acceptance():
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
-        if private.parent.resolve() != tools.resolve() or not private.name.startswith("adapter-acceptance-"):
-            raise RuntimeError("Refusing cleanup outside harness directory")
+        if (private.resolve() != owned_private or private.parent.resolve() != private_parent
+                or not private.name.startswith("hx-adapter-")):
+            raise RuntimeError("Refusing cleanup outside the owned harness temporary directory")
         if cleanup_errors:
             raise RuntimeError("Harness cleanup needs attention: " + ", ".join(cleanup_errors))
         shutil.rmtree(private)

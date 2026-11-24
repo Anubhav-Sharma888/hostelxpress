@@ -33,12 +33,46 @@ def bot_summary(row):
     return {key:row[key] for key in ('id','status','battery_level','current_lat','current_lng','last_seen_at','telemetry_observed_at','load_deadline_at')}
 
 
+def pickup_state(conn, order, bot):
+    """Sanitized order/bay-bound pickup proof; rover-wide state is insufficient."""
+    if order['status'] != 'Paid':
+        return 'not_ready'
+    if not bot or bot['status'] not in {'AT_HOSTEL', 'UNLOCKED'} or order['compartment_released_at'] is not None:
+        return 'reconciliation_required'
+    captured = conn.execute("SELECT 1 FROM public.transactions WHERE order_id=%s AND status='Captured' AND amount=1000 AND currency='INR' AND is_demo=%s", (order['id'], order['is_demo'])).fetchone()
+    if not captured:
+        return 'reconciliation_required'
+    command = conn.execute("SELECT * FROM hostelxpress_private.command_outbox WHERE order_id=%s AND command='unlock_inner'", (order['id'],)).fetchone()
+    if not command:
+        return 'otp_required' if not order['is_demo'] else 'unlock_pending'
+    if command['bot_id'] != order['bot_id'] or command['compartment'] != order['compartment_id'] or command['is_demo'] != order['is_demo']:
+        return 'reconciliation_required'
+    if not order['is_demo']:
+        authorized = conn.execute('SELECT 1 FROM hostelxpress_private.pickup_otp_challenges WHERE order_id=%s AND bot_id=%s AND compartment=%s AND consumed_at IS NOT NULL AND consumed_at<=%s', (order['id'], order['bot_id'], order['compartment_id'], command['issued_at'])).fetchone()
+        if not authorized:
+            return 'reconciliation_required'
+    if command['status'] in {'pending', 'published'}:
+        return 'unlock_pending'
+    if command['status'] != 'executed' or command['acknowledged_at'] is None:
+        return 'reconciliation_required'
+    at = now()
+    fresh = lambda stamp: stamp is not None and 0 <= (at-stamp).total_seconds() <= 15
+    device = conn.execute('SELECT clock_synchronized FROM hostelxpress_private.device_state WHERE bot_id=%s', (order['bot_id'],)).fetchone()
+    bay = conn.execute('SELECT * FROM hostelxpress_private.compartment_state WHERE bot_id=%s AND compartment_id=%s', (order['bot_id'], order['compartment_id'])).fetchone()
+    if (device and device['clock_synchronized'] and fresh(bot['last_seen_at']) and fresh(bot['telemetry_observed_at'])
+            and bay and fresh(bay['observed_at']) and bay['observed_at'] >= command['acknowledged_at']
+            and bay['outer_closed'] is True and bay['inner_closed'] is False):
+        return 'open'
+    return 'reconciliation_required'
+
+
 def serialize_order(conn, row):
     item = dict(row)
     bot = None
     if item['bot_id'] and item['status'] not in TERMINAL:
         bot = bot_summary(conn.execute('SELECT * FROM public.bots WHERE id=%s',(item['bot_id'],)).fetchone())
     item['bot'] = bot
+    item['pickup_state'] = pickup_state(conn, item, bot)
     item['timeline'] = conn.execute('SELECT id,status,at,label FROM public.order_events WHERE order_id=%s ORDER BY at,id',(item['id'],)).fetchall()
     payment = conn.execute('SELECT status FROM public.transactions WHERE order_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(item['id'],)).fetchone()
     item['payment_status'] = payment['status'] if payment else None
@@ -81,7 +115,7 @@ def ensure_demo(conn):
         conn.execute('INSERT INTO hostelxpress_private.compartment_state(bot_id,compartment_id,outer_closed,inner_closed,is_empty,observed_at) VALUES(%s,%s,true,true,true,now()) ON CONFLICT DO NOTHING',(DEMO_BOT_ID,compartment))
 
 
-def book(conn, user_id, booking, key, is_demo):
+def book(conn, user_id, booking, key, is_demo, *, staging=False):
     fingerprint = hashlib.sha256(json.dumps(booking.model_dump(),sort_keys=True,separators=(',',':')).encode()).hexdigest()
     advisory = int.from_bytes(hashlib.sha256((str(user_id)+str(key)).encode()).digest()[:8],'big',signed=True)
     conn.execute('SELECT pg_advisory_xact_lock(%s)',(advisory,))
@@ -91,6 +125,14 @@ def book(conn, user_id, booking, key, is_demo):
             raise HTTPException(409,'This Idempotency-Key was already used for different booking details')
         return serialize_order(conn,existing)
     get_profile(conn,user_id)
+    if staging:
+        # Mark staging rows as demo so the live allocation query can never take them.
+        order = conn.execute(
+            'INSERT INTO public.orders(user_id,destination_hostel_block,parcel_label,idempotency_key,request_fingerprint,is_demo) VALUES(%s,%s,%s,%s,%s,true) RETURNING *',
+            (user_id,booking.destination_hostel_block,booking.parcel_label,key,fingerprint),
+        ).fetchone()
+        event(conn,order['id'],'Pending','Test booking saved in staging; no rover is assigned')
+        return serialize_order(conn,order)
     if is_demo:
         # An explicit local simulator operation produces a synthetic heartbeat.
         conn.execute('UPDATE public.bots SET last_seen_at=now() WHERE is_demo=true')
@@ -193,7 +235,16 @@ def enqueue_unlock(conn, order, bot, *, is_demo=False):
     paid = conn.execute("SELECT id FROM public.transactions WHERE order_id=%s AND status='Captured' AND amount=1000 AND currency='INR' AND is_demo=%s",(order['id'],is_demo)).fetchone()
     if not paid:
         return False
-    conn.execute("INSERT INTO hostelxpress_private.command_outbox(order_id,bot_id,compartment,command,is_demo,status) VALUES(%s,%s,%s,'unlock_inner',%s,%s) ON CONFLICT(order_id,command) DO NOTHING",(order['id'],bot['id'],order['compartment_id'],is_demo,'executed' if is_demo else 'pending'))
+    if not is_demo:
+        # No background worker, webhook, or API path can bypass verified OTP2.
+        challenge = conn.execute("SELECT consumed_at FROM hostelxpress_private.pickup_otp_challenges "
+                                 "WHERE order_id=%s AND bot_id=%s AND compartment=%s AND consumed_at IS NOT NULL",
+                                 (order['id'],bot['id'],order['compartment_id'])).fetchone()
+        if not challenge:
+            return False
+    # PostgreSQL now() is transaction-start time; issue after the OTP was consumed.
+    issued = now()
+    conn.execute("INSERT INTO hostelxpress_private.command_outbox(order_id,bot_id,compartment,command,is_demo,status,issued_at,expires_at) VALUES(%s,%s,%s,'unlock_inner',%s,%s,%s,%s) ON CONFLICT(order_id,command) DO NOTHING",(order['id'],bot['id'],order['compartment_id'],is_demo,'executed' if is_demo else 'pending',issued,issued+timedelta(seconds=10)))
     if is_demo:
         conn.execute("UPDATE public.bots SET status='UNLOCKED' WHERE id=%s",(bot['id'],))
     return True
@@ -263,8 +314,6 @@ def tick(db):
                     releasable = bool(state and state['is_empty'] is True and safe_bot(conn,bot))
                     conn.execute("UPDATE public.orders SET status='Failed',failed_at=now(),failure_reason='rider_no_show',compartment_released_at=CASE WHEN %s THEN GREATEST(now(),created_at) ELSE NULL END WHERE id=%s",(releasable,order['id']))
                     event(conn,order['id'],'Failed','Rider no-show after five minutes')
-                if order['status']=='Paid' and not order['is_demo']:
-                    enqueue_unlock(conn,order,bot)
             dispatch(conn,bot['id'])
         # A dispatched bot requeues its unloaded reservations while their rider
         # deadline still runs; without re-reservation such an order could never

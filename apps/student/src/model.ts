@@ -1,4 +1,4 @@
-import type {DemoAction, Order, OrderStatus} from './api';
+import type {Bot, DemoAction, Order, OrderStatus, PickupState, Session} from './api';
 
 // Google Stitch export, 17 November 2026: orange actions, navy text, lavender surfaces.
 export const COLORS = {
@@ -33,4 +33,29 @@ export const nextDemoAction = (status: OrderStatus): {action: DemoAction; label:
 })[status];
 export function isStale(lastSeen?: string | null, now = Date.now()) {
   return !lastSeen || !Number.isFinite(Date.parse(lastSeen)) || now - Date.parse(lastSeen) > 15000;
+}
+
+export function freshRoverPosition(bot: Bot | null, now = Date.now()) {
+  if (!bot || isStale(bot.last_seen_at, now) || isStale(bot.telemetry_observed_at, now)) return null;
+  const {current_lat: lat, current_lng: lng} = bot;
+  if (typeof lat !== 'number' || !Number.isFinite(lat) || Math.abs(lat) > 90 ||
+      typeof lng !== 'number' || !Number.isFinite(lng) || Math.abs(lng) > 180) return null;
+  return {lat, lng};
+}
+
+// Real pickup readiness belongs to one order and bay. Rover-wide UNLOCKED
+// only drives explicitly simulated sessions; it cannot prove a real bay opened.
+export function derivePickupState(order: Pick<Order, 'status' | 'bot' | 'pickup_state'>, mode: Session['mode'], now = Date.now()): PickupState {
+  if (order.status !== 'Paid') return 'not_ready';
+  const bot = order.bot;
+  const fresh = (value?: string | null) => !!value && Number.isFinite(Date.parse(value)) &&
+    Date.parse(value) <= now && now - Date.parse(value) <= 15000;
+  if (mode !== 'real') {
+    return bot?.status === 'UNLOCKED' && fresh(bot.last_seen_at) ? 'open' : 'otp_required';
+  }
+  if (order.pickup_state === 'unlock_pending' || order.pickup_state === 'reconciliation_required') {
+    return order.pickup_state;
+  }
+  if (!bot || bot.status === 'FAULT_MODE' || !fresh(bot.last_seen_at) || !fresh(bot.telemetry_observed_at)) return 'not_ready';
+  return order.pickup_state === 'open' || order.pickup_state === 'otp_required' ? order.pickup_state : 'not_ready';
 }

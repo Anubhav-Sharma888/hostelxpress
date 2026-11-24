@@ -1,12 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {makeLocalBooking, QA_ORDERS, QA_PREVIEW, QA_SESSION} from '../src/qa.ts';
+import {makeLocalBooking, QA_ORDERS, QA_SESSION} from '../src/qa.ts';
 
 // The offline QA preview: build-time flag default, sample data shape, and the
 // local booking path. Nothing here may import the API or network modules.
 
-test('QA preview is a build-time opt-in and defaults to off', () => {
-  assert.equal(QA_PREVIEW, false, 'EXPO_PUBLIC_QA_PREVIEW unset must keep the skip button out of normal builds');
+test('QA preview is enabled by default and can be disabled explicitly', async () => {
+  const previous = process.env.EXPO_PUBLIC_QA_PREVIEW;
+  try {
+    delete process.env.EXPO_PUBLIC_QA_PREVIEW;
+    const defaultConfig = await import('../src/qa.ts?preview=default');
+    assert.equal(defaultConfig.QA_PREVIEW, true);
+
+    process.env.EXPO_PUBLIC_QA_PREVIEW = '0';
+    const disabledConfig = await import('../src/qa.ts?preview=disabled');
+    assert.equal(disabledConfig.QA_PREVIEW, false);
+  } finally {
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_QA_PREVIEW;
+    else process.env.EXPO_PUBLIC_QA_PREVIEW = previous;
+  }
 });
 
 test('sample orders render through the normal screens without a backend', () => {
@@ -32,8 +44,12 @@ test('sample booking is local, labelled, and priced like a standard parcel', () 
   assert.equal(booking.timeline.length, 1);
 });
 
-test('preview session marker is a mode label, assembled, not a stored secret', () => {
-  assert.equal(QA_SESSION.access_token, ['qa', 'preview', 'mode'].join('-'));
+test('preview session carries no credential-shaped field', () => {
   assert.equal(QA_SESSION.mode, 'qa-preview');
   assert.equal(QA_SESSION.user.name, 'QA Preview Student');
+  // The Session union gives the qa-preview variant no token fields at all:
+  // nothing on the preview path can hold or send a bearer token.
+  assert.equal('access_token' in QA_SESSION, false);
+  assert.equal('token_type' in QA_SESSION, false);
+  assert.equal('expires_in' in QA_SESSION, false);
 });

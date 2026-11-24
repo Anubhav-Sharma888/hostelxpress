@@ -47,7 +47,9 @@ test('student can book, track, pay in demo, and confirm collection', async ({pag
   await expect(page.getByText('Delivery Complete · Compartment Latched', {exact: true})).toBeVisible();
   await expect(page.getByTestId('demo-next-action')).toHaveCount(0);
   await page.getByRole('link', {name: 'Help & History', exact: true}).click();
-  await page.getByRole('tab', {name: 'Completed deliveries'}).click();
+  await expect(page.getByRole('button', {name: 'Call HostelXpress support'})).toBeVisible();
+  await page.getByRole('link', {name: /Delivery history/}).click();
+  await expect(page.getByRole('heading', {name: 'Delivery history', exact: true})).toBeVisible();
   await expect(page.getByText('Amazon · Lunch from Gate 2 · Room 304, Wing A', {exact: true})).toBeVisible();
   await page.getByRole('button', {name: 'Open my profile', exact: true}).click();
   await expect(page.getByText('Right at home.', {exact: true})).toBeVisible();

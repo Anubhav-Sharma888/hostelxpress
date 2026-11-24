@@ -1,20 +1,20 @@
-// Offline QA preview: a build-time opt-in (EXPO_PUBLIC_QA_PREVIEW=1) that
-// adds a "Skip sign-in for testing" entry to the real-mode sign-in screen.
+// Offline QA preview is enabled until database sign-in is ready.
+// Set EXPO_PUBLIC_QA_PREVIEW=0 to build without the skip option.
 // The preview session is purely in-memory: sample orders render through the
 // normal screens, sample actions mutate local state only, and NOTHING here
 // calls Supabase, the API, payments, or rover services. Normal authentication
 // and backend authorization are untouched.
-import type {Bot, Order, OrderStatus, User} from './api';
+import type {Bot, Order, OrderStatus, PreviewSession, User} from './api';
 
-// Build-time flag. Expo inlines EXPO_PUBLIC_* at bundle time; unset means off.
-export const QA_PREVIEW = process.env.EXPO_PUBLIC_QA_PREVIEW === '1';
+// Expo inlines the flag at bundle time. Unset or empty uses the QA default.
+export const QA_PREVIEW = (process.env.EXPO_PUBLIC_QA_PREVIEW || '1') === '1';
 
 export const QA_PREVIEW_LABEL = 'QA PREVIEW';
 
 export const QA_USER: User = {
   id: 'qa-preview-user-0000-0000-0000-000000000000',
   name: 'QA Preview Student',
-  hostel_block: 'C',
+  hostel_block: 'apj-abdul-kalam',
 };
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60000).toISOString();
@@ -25,7 +25,7 @@ const sampleOrder = (over: {
 }): Order => ({
   id: over.id,
   status: over.status,
-  destination_hostel_block: 'C',
+  destination_hostel_block: 'apj-abdul-kalam',
   parcel_label: over.label,
   amount: 1000,
   currency: 'INR',
@@ -59,14 +59,11 @@ export const QA_ORDERS: Order[] = [
   sampleOrder({id: 'qa-order-done-0000-0000-0000-000000000002', status: 'Completed', payment_status: 'SimPaid', compartment_id: 1, createdMin: 1440, label: 'QA preview · yesterday tuck box'}),
 ];
 
-// The preview session's access_token field is a UI mode marker, not a
-// credential: nothing reads it (refresh is a no-op in preview), and it is
-// assembled at runtime from innocuous parts so it cannot be mistaken for a
-// stored secret.
-export const QA_SESSION = {
-  access_token: ['qa', 'preview', 'mode'].join('-'),
-  token_type: 'bearer',
-  expires_in: 86400,
+// The preview session carries no credential-shaped field: `Session` is a
+// discriminated union and the qa-preview variant has no access_token, so no
+// code on this path can hold or send a bearer token. refresh() is a no-op in
+// preview and every network consumer must narrow on `mode` first.
+export const QA_SESSION: PreviewSession = {
   mode: 'qa-preview',
   user: QA_USER,
 };

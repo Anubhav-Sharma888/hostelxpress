@@ -3,6 +3,7 @@ import {KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View} 
 import {router} from 'expo-router';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AUTH_MODE} from '../api';
+import {DEFAULT_HOSTEL, hostelName} from '../campus';
 import {QA_PREVIEW} from '../qa';
 import {HostelPicker} from '../components/HostelPicker';
 import {Wordmark} from '../components/AppShell';
@@ -46,7 +47,7 @@ function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
           style={[common.input, {marginTop: 6}]}
         />
       </View>
-      <HostelPicker hostel={hostel} setHostel={setHostel} note="Select your hostel drop-off point (Blocks A–G)." />
+      <HostelPicker hostel={hostel} setHostel={setHostel} note="Choose your hostel drop-off point." />
       {error && <ErrorNotice message={error} />}
       <Button
         variant="primary"
@@ -79,7 +80,7 @@ function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Fast track as Student Alex"
-            onPress={() => void submit('Alex Rivers', 'B')}
+            onPress={() => void submit('Alex Rivers', 'ratan-tata')}
             style={({pressed}) => [{
               minHeight: 48,
               padding: 10,
@@ -99,7 +100,7 @@ function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
               </View>
               <View>
                 <T style={{fontFamily: 'DMSansBold', fontSize: 12}}>Student</T>
-                <T style={{fontSize: 10, color: C.muted}}>Alex · Tagore B Dropoff</T>
+                <T style={{fontSize: 10, color: C.muted}}>Alex · {hostelName('ratan-tata')}</T>
               </View>
             </View>
             <Icon name="flash" size={16} color={C.lime} />
@@ -141,7 +142,7 @@ function DemoForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
 }
 
 function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: string) => void}) {
-  const {signIn, signUp, enterQaPreview} = useApp();
+  const {signIn, signUp} = useApp();
   const [create, setCreate] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -217,7 +218,7 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
           style={[common.input, {marginTop: 6}]}
         />
       </View>
-      {create && <HostelPicker hostel={hostel} setHostel={setHostel} note="Hostel blocks A–G, not a configured campus." />}
+      {create && <HostelPicker hostel={hostel} setHostel={setHostel} note="Choose one of the six campus hostels." />}
       {error && <ErrorNotice message={error} />}
       <Button
         variant="primary"
@@ -226,9 +227,9 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
         loading={busy}
         disabled={!email.trim() || !password || (create && !name.trim())}
         testID={create ? 'sign-up-submit' : 'sign-in-submit'}
-        accessibilityLabel={create ? 'Create account' : 'Sign in'}
+        accessibilityLabel={create ? 'Create account' : busy ? 'Signing in' : 'Sign in'}
       >
-        {create ? 'Create Mission Account' : 'Sign In to Mission Console'}
+        {create ? 'Create Mission Account' : busy ? 'Signing in…' : 'Sign In to Mission Console'}
       </Button>
       <Pressable
         accessibilityRole="link"
@@ -244,38 +245,14 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
           {create ? 'Already registered? Sign in' : 'New student? Register hostel room'}
         </T>
       </Pressable>
-      {QA_PREVIEW && (
-        <View style={{marginTop: 10, padding: 14, borderRadius: 12, backgroundColor: C.dark, borderWidth: 1, borderColor: C.dark, gap: 8}}>
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-            <Icon name="construct-outline" size={17} color={C.lime} />
-            <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: C.lime}}>QA PREVIEW</T>
-            <T style={{fontSize: 10, color: '#CBD5E1'}}>offline · no backend calls</T>
-          </View>
-          <T style={{fontSize: 11, lineHeight: 16, color: '#CBD5E1'}}>
-            Skips authentication entirely. The app runs on sample data from memory; nothing reaches Supabase, the API, payments, or rovers.
-          </T>
-          <Button
-            variant="secondary"
-            icon="play-skip-forward-outline"
-            onPress={() => {
-              enterQaPreview();
-              router.replace('/');
-            }}
-            disabled={busy}
-            testID="qa-skip-sign-in"
-            accessibilityLabel="Skip sign-in for testing"
-          >
-            Skip sign-in for testing
-          </Button>
-        </View>
-      )}
     </View>
   );
 }
 
 export default function SignIn() {
+  const {enterQaPreview} = useApp();
   const insets = useSafeAreaInsets();
-  const [hostel, setHostel] = useState('C');
+  const [hostel, setHostel] = useState<string>(DEFAULT_HOSTEL);
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1, backgroundColor: C.canvas}}>
@@ -299,7 +276,7 @@ export default function SignIn() {
               Autonomous Gate 2 Deliveries.
             </Heading>
             <T style={{fontSize: 13, lineHeight: 20, color: C.muted, textAlign: 'center', maxWidth: 360}}>
-              Food, parcels, and essentials routed to Tagore, Sarojini, and Bhabha hostels.
+              Food, parcels, and essentials for the six campus hostels.
             </T>
           </View>
 
@@ -311,6 +288,30 @@ export default function SignIn() {
                 {AUTH_MODE === 'demo' ? 'Enter university name or demo fast-track' : 'Enter university credentials or demo fast-track'}
               </T>
             </View>
+            {QA_PREVIEW && (
+              <View style={{padding: 14, borderRadius: 12, backgroundColor: C.dark, borderWidth: 1, borderColor: C.dark, gap: 8}}>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                  <Icon name="construct-outline" size={17} color={C.lime} />
+                  <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: C.lime}}>QA PREVIEW</T>
+                  <T style={{fontSize: 10, color: '#CBD5E1'}}>offline · no backend calls</T>
+                </View>
+                <T style={{fontSize: 11, lineHeight: 16, color: '#CBD5E1'}}>
+                  Preview the app with sample data. No account or backend connection is needed.
+                </T>
+                <Button
+                  variant="secondary"
+                  icon="play-skip-forward-outline"
+                  onPress={() => {
+                    enterQaPreview();
+                    router.replace('/');
+                  }}
+                  testID="qa-skip-sign-in"
+                  accessibilityLabel="Skip sign-in for testing"
+                >
+                  Skip sign-in for testing
+                </Button>
+              </View>
+            )}
             {AUTH_MODE === 'real' ? <RealForm hostel={hostel} setHostel={setHostel} /> : <DemoForm hostel={hostel} setHostel={setHostel} />}
           </View>
 

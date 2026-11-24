@@ -107,6 +107,9 @@ export function AppProvider({children}: {children: React.ReactNode}) {
   };
   const updateProfile = async (patch: {name?: string; hostel_block: string}) => {
     if (!session) throw new Error('Please sign in first.');
+    // Preview sessions carry no credential field; profile changes are a
+    // backend call and stay out of the offline preview entirely.
+    if (session.mode === 'qa-preview') throw new Error('Profile changes are not available in the offline QA preview.');
     const current = generation.current;
     const profile = await request<User>('/v1/me', session.access_token, {method: 'PATCH', body: patch});
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your profile.');
@@ -124,7 +127,7 @@ export function AppProvider({children}: {children: React.ReactNode}) {
     }
     const current = generation.current;
     const order = await request<Order>('/v1/orders', session.access_token, {
-      method: 'POST', body: {parcel_label: label.trim(), destination_hostel_block: hostel}, idempotencyKey: key,
+      method: 'POST', body: {parcel_label: label.trim(), destination_hostel_block: hostel}, idempotencyKey: key, timeoutMs: 75000,
     });
     if (!alive.current || current !== generation.current) throw new Error('The session changed. Please reopen your deliveries.');
     upsert(order); void refresh(); return order;

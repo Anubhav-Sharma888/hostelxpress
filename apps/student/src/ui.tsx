@@ -18,14 +18,14 @@ export function Label({children, style}: {children: React.ReactNode; style?: Sty
   return <T style={[{fontFamily: 'DMSansBold', fontSize: 10, lineHeight: 16, letterSpacing: 1.5, textTransform: 'uppercase', color: C.muted}, style]}>{children}</T>;
 }
 export function Button({children, onPress, icon, variant = 'primary', loading, disabled, small, testID, accessibilityLabel, prominent}: {
-  children: string; onPress: () => void; icon?: IconName; variant?: 'primary' | 'orange' | 'secondary' | 'ghost' | 'dark';
+  children: string; onPress: () => void; icon?: IconName; variant?: 'primary' | 'orange' | 'secondary' | 'ghost' | 'dark' | 'rust';
   loading?: boolean; disabled?: boolean; small?: boolean; testID?: string; accessibilityLabel?: string; prominent?: boolean;
 }) {
-  const light = variant === 'primary' || variant === 'orange';
+  const light = variant === 'primary' || variant === 'orange' || variant === 'rust';
   const color = light ? C.onLime : variant === 'dark' ? C.white : C.ink;
   return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || children} accessibilityState={{disabled: disabled || loading}} disabled={disabled || loading} testID={testID} onPress={onPress}
     style={({pressed}) => [{minHeight: 48, paddingHorizontal: small ? 14 : 20, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9,
-      backgroundColor: variant === 'primary' ? C.lime : variant === 'orange' ? C.orange : variant === 'dark' ? C.ink : variant === 'secondary' ? C.pale : 'transparent',
+      backgroundColor: variant === 'primary' ? C.lime : variant === 'orange' ? C.orange : variant === 'rust' ? C.primary : variant === 'dark' ? C.ink : variant === 'secondary' ? C.pale : 'transparent',
       borderWidth: variant === 'ghost' ? 1 : 0, borderColor: C.line, opacity: disabled || loading ? 0.55 : pressed ? 0.8 : 1}]}>
       {loading ? <ActivityIndicator size="small" color={color} /> : icon ? <Icon name={icon} color={color} size={17} /> : null}
       <T style={{fontFamily: prominent ? 'ManropeBold' : 'DMSansBold', color, fontSize: prominent ? 18 : small ? 12 : 14, lineHeight: prominent ? 26 : 22, flexShrink: 1, minWidth: 0, textAlign: 'center'}}>{children}</T>

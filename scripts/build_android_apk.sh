@@ -48,9 +48,12 @@ export NODE_ENV=development
 export HX_ANDROID_LOCAL_QA=$LOCAL_QA
 PUBLIC_ENV=$(cd "$APP_ROOT" && node <<'JS'
 require('@expo/env').loadProjectEnv(process.cwd(), {silent: true});
+process.env.EXPO_PUBLIC_QA_PREVIEW ||= '1';
+// Owner-confirmed public support number; explicit build settings may override it.
+process.env.EXPO_PUBLIC_SUPPORT_PHONE ||= '+919667251210';
 require('./plugins/withAndroidNetwork.cjs').validateBuildUrl(
   process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000', process.env.HX_ANDROID_LOCAL_QA === '1');
-for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY']) {
+for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'EXPO_PUBLIC_QA_PREVIEW', 'EXPO_PUBLIC_SUPPORT_PHONE']) {
   if (process.env[key] !== undefined) {
     if (/[\r\n]/.test(process.env[key])) throw new Error('Public app configuration must be single-line.');
     process.stdout.write(`${key}=${process.env[key]}\n`);
@@ -119,8 +122,17 @@ if [[ $PREP_ONLY -eq 1 ]]; then
   exit 0
 fi
 TASK="assemble${VARIANT^}"
+# Bundle-task inputs mirror the public env so a flip re-runs the Hermes bundle
+# (see plugins/withAndroidBundleEnv.cjs). Plain -P strings, no lazy providers.
+BUNDLE_PROPS=(
+  "-PEXPO_PUBLIC_QA_PREVIEW=$EXPO_PUBLIC_QA_PREVIEW"
+  "-PEXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-}"
+  "-PEXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL:-}"
+  "-PEXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}"
+  "-PEXPO_PUBLIC_SUPPORT_PHONE=${EXPO_PUBLIC_SUPPORT_PHONE:-}"
+)
 # Resource-capped builds: two workers, no parallel projects, background priority.
-(cd "$APP_ROOT/android" && nice -n 10 ./gradlew "$TASK" --no-daemon --max-workers=2 --no-parallel -q </dev/null)
+(cd "$APP_ROOT/android" && nice -n 10 ./gradlew "$TASK" --no-daemon --max-workers=2 --no-parallel "${BUNDLE_PROPS[@]}" -q </dev/null)
 APK="$APP_ROOT/android/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 [[ -f "$APK" ]] || { printf 'Build finished but no APK at %s\n' "$APK" >&2; exit 1; }
 printf '\nAPK: %s\nvariant: %s; local_qa: %s\n' "$APK" "$VARIANT" "$LOCAL_QA"

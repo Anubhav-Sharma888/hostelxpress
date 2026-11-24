@@ -153,7 +153,7 @@ def proof():
             os.environ[key]=value
         from app.config import Settings
         from app.main import create_app
-        settings=Settings(app_env="production",database_url=db_url,supabase_url="https://transport-proof.invalid",worker_enabled=True,mqtt_host="localhost",mqtt_port=MQTT_PORT,mqtt_ca_file=str(private/"ca.crt"),mqtt_username=pub_user,mqtt_password=pub_credential,mqtt_ingest_username=ingest_user,mqtt_ingest_credential=ingest_credential,mqtt_ingest_client_id="fixture-ingest-"+uuid4().hex,trusted_hosts="127.0.0.1,localhost")
+        settings=Settings(app_env="production",database_url=db_url,supabase_url="https://transport-proof.invalid",worker_enabled=True,mqtt_host="localhost",mqtt_port=MQTT_PORT,mqtt_ca_file=str(private/"ca.crt"),mqtt_username=pub_user,mqtt_password=pub_credential,mqtt_ingest_username=ingest_user,mqtt_ingest_password=ingest_credential,mqtt_ingest_client_id="fixture-ingest-"+uuid4().hex,trusted_hosts="127.0.0.1,localhost")
         app=create_app(settings)
         server=uvicorn.Server(uvicorn.Config(app,host="127.0.0.1",port=HTTP_PORT,access_log=False,log_config=None,log_level="warning"))
         server_thread=threading.Thread(target=server.run,daemon=True,name="mqtt-proof-api")
@@ -191,7 +191,7 @@ def proof():
             return True
         ledger=private/"device.sqlite3"
         def device():
-            return HostelxpressLink(str(bot_id),ledger,broker=BrokerConfig(host="localhost",port=MQTT_PORT,username=bot_user,password=bot_credential,ca_file=str(private/"ca.crt")),api_url="http://127.0.0.1:"+str(HTTP_PORT),device_credential=device_credential,allow_loopback_http=True,guard=guard,on_unlock=fake_actuator,clock_synchronized=lambda:True)
+            return HostelxpressLink(str(bot_id),ledger,broker=BrokerConfig(host="localhost",port=MQTT_PORT,username=bot_user,password=bot_credential,ca_file=str(private/"ca.crt")),api_url="http://127.0.0.1:"+str(HTTP_PORT),device_secret=device_credential,allow_loopback_http=True,guard=guard,on_unlock=fake_actuator,clock_synchronized=lambda:True)
         link=device()
         link.connect()
         wait_for(lambda:link.connected,"provisioned device TLS connection")

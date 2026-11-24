@@ -1,11 +1,12 @@
-import React, {useState} from 'react';
+import React, {ComponentProps, useState} from 'react';
 import {Image, Pressable, View} from 'react-native';
 import {router} from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import {BookModal} from '../components/BookModal';
 import {hostelName} from '../campus';
 import {COLORS as C, FLOW, formatAmount, isActive, shortId, STATUS_COPY} from '../model';
 import {useApp} from '../state';
-import {Button, Card, common, ErrorNotice, Heading, Icon, IconName, Label, Loading, T} from '../ui';
+import {Button, Card, common, ErrorNotice, Heading, Icon, Label, Loading, T} from '../ui';
 
 export default function Overview() {
   const {user,session,orders,loading,error,refresh,updatedAt} = useApp();
@@ -18,10 +19,10 @@ export default function Overview() {
     if (active) router.push({pathname:'/order/[id]',params:{id:active.id}});
   };
   if (!session) return <Loading/>;
-  const services: {title:string; subtitle:string; icon:IconName; action:()=>void; testID?:string}[] = [
-    {title:'Night Delivery Window',subtitle:'After Hours food delivery',icon:'moon-outline',action:()=>router.push('/afterhours' as never),testID:'afterhours-open'},
-    {title:'Campus Dropoff Rules',subtitle:'Cargo guidance, payment & collection',icon:'list-outline',action:()=>router.push('/help')},
-    {title:'Past Deliveries & Invoices',subtitle:'View '+orders.filter(order=>!isActive(order)).length+' previous dispatches',icon:'receipt-outline',action:()=>router.push('/deliveries')},
+  const services: {title:string; subtitle:string; icon:ComponentProps<typeof MaterialCommunityIcons>['name']; action:()=>void; testID?:string}[] = [
+    {title:'Night Delivery Window',subtitle:'After Hours food delivery',icon:'moon-waning-crescent',action:()=>router.push('/afterhours' as never),testID:'afterhours-open'},
+    {title:'Campus Dropoff Rules',subtitle:'Cargo guidance, payment & collection',icon:'clipboard-list-outline',action:()=>router.push('/help')},
+    {title:'Delivery history',subtitle:'View '+orders.filter(order=>!isActive(order)).length+' past deliveries',icon:'receipt-text-outline',action:()=>router.push('/history')},
   ];
   return <View style={{gap:16}}>
     {sampleMode && <View style={{gap:6}}>
@@ -43,8 +44,8 @@ export default function Overview() {
       {showActive && active ? <>
         <Card style={{padding:20,gap:14}}>
           <View style={common.between}><Label style={{color:C.primary}}>Active delivery</Label><T style={{fontSize:11,color:C.muted}}>{shortId(active.id)}</T></View>
-          <Heading style={{fontSize:24,lineHeight:31}}>On the way to {hostelName(active.destination_hostel_block)}</Heading>
-          <T style={{color:C.muted,fontSize:12}}>{STATUS_COPY[active.status].description}</T>
+          <Heading style={{fontSize:24,lineHeight:31}}>Delivery to {hostelName(active.destination_hostel_block)}</Heading>
+          <T style={{color:C.muted,fontSize:12}}>{session.mode==='real' && active.is_demo ? 'Test booking saved in staging. No rover or payment is assigned.' : STATUS_COPY[active.status].description}</T>
           <View style={{height:8,borderRadius:8,backgroundColor:C.pale,overflow:'hidden'}}>
             <View style={{height:8,borderRadius:8,backgroundColor:C.orange,width:`${Math.max(1,FLOW.indexOf(active.status)+1)/FLOW.length*100}%`}}/>
           </View>
@@ -91,7 +92,7 @@ export default function Overview() {
         <Icon name="git-network-outline" color={C.ink}/>
         <View style={{flex:1,gap:5}}>
           <Heading style={{fontSize:16,lineHeight:23,letterSpacing:-.3}}>Autonomous 3-Compartment Network</Heading>
-          <T style={{fontSize:12,lineHeight:19,color:C.muted}}>Routes between Gate 2 Security Booth and all 7 Campus Hostels: Kaveri, Krishna, Godavari, Brahmaputra, Ganga, Yamuna &amp; Narmada.</T>
+          <T style={{fontSize:12,lineHeight:19,color:C.muted}}>Six campus hostels: Bhagat Singh, Ratan Tata, APJ Abdul Kalam and Vikram Sarabhai for boys; Kalpana Chawla and Gargi for girls. Campus pickup is at Gate 2.</T>
         </View>
       </Card>
       <Heading style={{fontSize:18,lineHeight:24,letterSpacing:-.3}}>Campus Services &amp; Rules</Heading>
@@ -99,7 +100,7 @@ export default function Overview() {
         {services.map((service,index)=><Pressable key={service.title} accessibilityRole="button" accessibilityLabel={service.title} onPress={service.action} testID={service.testID}
           style={{backgroundColor:C.white,borderRadius:14,padding:16,flexDirection:'row',gap:10,alignItems:'center',minHeight:80}}>
           <View style={{width:48,height:48,borderRadius:12,backgroundColor:index===0?'#D3EDE9':C.lavender,alignItems:'center',justifyContent:'center'}}>
-            <Icon name={service.icon} color={index===0?C.teal:C.primary} size={24}/>
+            <MaterialCommunityIcons name={service.icon} color={index===0?C.teal:C.primary} size={24}/>
           </View>
           <View style={{flex:1}}><T style={{fontFamily:'DMSansBold',fontSize:16,lineHeight:22}}>{service.title}</T><T style={{fontSize:12,lineHeight:18,color:C.muted}}>{service.subtitle}</T></View>
           <Icon name="chevron-forward-outline" color={C.muted} size={18}/>
@@ -110,6 +111,6 @@ export default function Overview() {
         <T style={{fontSize:12,lineHeight:18,color:C.muted,flex:1}}>Ordering food via Swiggy or Zomato? Set your drop address as &quot;Gate 2 HostelXpress Desk&quot; and request rover pickup.</T>
       </View>
     </>}
-    {booking && <BookModal initialHostel={user?.hostel_block||'A'} onClose={()=>setBooking(false)}/>}
+    {booking && <BookModal initialHostel={user?.hostel_block||undefined} onClose={()=>setBooking(false)}/>}
   </View>;
 }

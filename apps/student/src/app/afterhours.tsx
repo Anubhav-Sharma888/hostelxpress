@@ -4,6 +4,7 @@ import {Image, useWindowDimensions, View} from 'react-native';
 import {COLORS as C, formatAmount} from '../model';
 import {getMerchants, PilotMerchant, PilotSchedule} from '../pilot';
 import {useApp} from '../state';
+import {hostelName} from '../campus';
 import {Button, Card, ErrorNotice, Heading, Icon, Label, Loading, PageTitle, Pill, T} from '../ui';
 
 const merchantPhotos = {
@@ -14,7 +15,9 @@ const merchantPhotos = {
 export default function AfterHours() {
   const {session} = useApp();
   const {width} = useWindowDimensions();
-  const token = session?.access_token ?? '';
+  // Preview sessions carry no credential field; an empty token keeps the
+  // schedule/merchant effects from attempting any backend call.
+  const token = session && session.mode !== 'qa-preview' ? session.access_token : '';
   const [schedule, setSchedule] = useState<PilotSchedule | null>(null);
   const [merchants, setMerchants] = useState<PilotMerchant[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export default function AfterHours() {
               <T style={{fontSize: 12, lineHeight: 18, color: C.muted}}>
                 {merchant.kind === 'hot_food' ? 'Warm bites for your late-night plans.' : 'Snacks, study fuel and everyday essentials.'}
               </T>
-              <T style={{fontSize: 11, color: C.muted}}>Serving {merchant.hostel_block} block</T>
+              <T style={{fontSize: 11, color: C.muted}}>Serving {hostelName(merchant.hostel_block)}</T>
             </View>
           </View>
           <View style={{marginHorizontal: 18, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: C.lavender, gap: 6}}>

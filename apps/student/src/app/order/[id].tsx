@@ -1,11 +1,11 @@
-import React, {useState} from 'react';
-import {Image, Pressable, View} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {Image, Pressable, TextInput, View} from 'react-native';
 import {router, useLocalSearchParams} from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import {Order, Payment, request} from '../../api';
+import {ApiError, Order, Payment, PickupOtp2, request} from '../../api';
 import {hostelName} from '../../campus';
 import {CampusMap} from '../../components/CampusMap';
-import {FLOW, formatAmount, formatTime, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
+import {derivePickupState, FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
 import {useApp} from '../../state';
 import {useClock} from '../../hooks/useClock';
 import {Button, Card, ErrorNotice, Heading, Icon, Label, Loading, T} from '../../ui';
@@ -21,7 +21,7 @@ const pickupLabels = ['Pay Due', 'Verify', 'Assigned', 'Done'];
 export default function DeliveryDetail() {
   const {id} = useLocalSearchParams<{id: string}>();
   const {session} = useApp();
-  return <DeliveryContent key={id + ':' + (session?.access_token || 'signed-out')} />;
+  return <DeliveryContent key={id + ':' + (session ? (session.mode === 'qa-preview' ? 'qa-preview:' + session.user.id : session.access_token) : 'signed-out')} />;
 }
 
 function DeliveryContent() {
@@ -31,17 +31,67 @@ function DeliveryContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
+  const [pickupOtp, setPickupOtp] = useState<PickupOtp2 | null>(null);
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [courierCode, setCourierCode] = useState('');
+  const [courierQueued, setCourierQueued] = useState(false);
   const [previewStage, setPreviewStage] = useState<number | null>(null);
   const [showPreviewControls, setShowPreviewControls] = useState(false);
   const now = useClock();
   const qa = session?.mode === 'qa-preview';
   const demo = session?.mode === 'demo';
+  const paymentToken = session && session.mode !== 'qa-preview' ? session.access_token : undefined;
+  const paymentOrderId = storedOrder?.id;
+  const paymentOrderStatus = storedOrder?.status;
+  const paymentPickupState = storedOrder?.pickup_state;
+  // Rehydrate a saved payment after screen reopen without creating another QR.
+  // The server returns 404 before first payment; that is an expected state.
+  useEffect(() => {
+    if (!paymentToken || !paymentOrderId ||
+        !['Arrived', 'Paid'].includes(paymentOrderStatus || '')) return;
+    let active = true;
+    void request<Payment>('/v1/orders/' + encodeURIComponent(paymentOrderId) + '/payment',
+      paymentToken, {timeoutMs: 75000}).then(result => {
+        if (active) setPayment(result);
+      }).catch(err => {
+        if (active && !(err instanceof ApiError && err.status === 404)) {
+          setError((err as Error).message);
+        }
+      });
+    return () => { active = false; };
+  }, [paymentToken, paymentOrderId, paymentOrderStatus]);
+
+  // Read-only recovery of an already issued pickup code; it never creates
+  // one and does not issue any compartment command.
+  useEffect(() => {
+    if (session?.mode !== 'real' || !paymentToken || !paymentOrderId ||
+        paymentOrderStatus !== 'Paid' || paymentPickupState !== 'otp_required') return;
+    let active = true;
+    void request<PickupOtp2>('/v1/orders/' + encodeURIComponent(paymentOrderId) + '/pickup-otp',
+      paymentToken).then(result => {
+        if (active) setPickupOtp(result);
+      }).catch(err => {
+        if (active && !(err instanceof ApiError && err.status === 404)) {
+          setError((err as Error).message);
+        }
+      });
+    return () => {active = false;};
+  }, [paymentToken, paymentOrderId, paymentOrderStatus, paymentPickupState, session?.mode]);
 
   if (!storedOrder) {
     return loading ? <Loading /> : <View style={{gap: 16}}>
       <Heading style={title}>Delivery unavailable.</Heading>
       <Button onPress={() => router.replace('/deliveries')}>Back to my deliveries</Button>
     </View>;
+  }
+  if (session?.mode === 'real' && storedOrder.is_demo) {
+    return <Card style={{...card, gap: 10}}>
+      <Label>{shortId(storedOrder.id)}</Label>
+      <Heading style={title}>Test booking saved</Heading>
+      <T>{storedOrder.parcel_label} · {hostelName(storedOrder.destination_hostel_block)}</T>
+      <T style={{color:S.muted}}>Your booking is stored in staging. It has no rover assignment and no charge.</T>
+      <Button variant="secondary" onPress={() => router.push({pathname:'/deliveries',params:{view:'active'}})}>Back to active orders</Button>
+    </Card>;
   }
   // Preview controls render local fixture states only. They never send commands or payments.
   const order: Order = qa && previewStage !== null ? {
@@ -56,11 +106,18 @@ function DeliveryContent() {
     },
   } : storedOrder;
   const stale = isStale(order.bot?.last_seen_at, now);
-  const unlocked = order.status === 'Paid' && order.bot?.status === 'UNLOCKED' && !stale;
+  const pickupState = derivePickupState(order, session?.mode ?? 'real', now);
+  const unlocked = pickupState === 'open';
   const handover = ['Arrived', 'Paid', 'Completed'].includes(order.status);
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
-  const expired = payment?.expires_at ? Date.parse(payment.expires_at) <= now : false;
+  const expired = payment?.status === 'pending' && payment.expires_at ? Date.parse(payment.expires_at) <= now : false;
+  const alreadyPaid = payment?.status === 'paid';
+  const refunded = payment?.status === 'refunded';
+  const paymentFailed = payment?.status === 'failed';
+  const reconciling = payment?.status === 'reconciling';
+  const needsReview = expired || refunded || paymentFailed || reconciling;
   const next = nextDemoAction(order.status);
+  const roverPosition = session?.mode === 'real' ? freshRoverPosition(order.bot, now) : null;
   const destination = hostelName(order.destination_hostel_block);
   const status = unlocked ? 'Ready to collect' : order.status === 'Arrived' ? 'Arrived · Awaiting payment' : STATUS_COPY[order.status].label;
   const stageNames = ['Parcel verified & loaded', 'Compartment sealed', 'Rover dispatched across campus', 'Hostel arrival & locker unlock'];
@@ -74,12 +131,41 @@ function DeliveryContent() {
     catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   };
+  const sendCourierCode = async () => {
+    if (!session || session.mode !== 'real' || !storedOrder || otpBusy) return;
+    if (!/^[0-9]{4,8}$/.test(courierCode)) {
+      setError('Enter the 4–8 digit OTP provided by your delivery company.');
+      return;
+    }
+    setOtpBusy(true);
+    setError(null);
+    setCourierQueued(false);
+    try {
+      await request('/v1/orders/' + encodeURIComponent(storedOrder.id) + '/courier-code',
+        session.access_token, {method: 'POST', body: {code: courierCode}, timeoutMs: 75000});
+      setCourierCode('');
+      setCourierQueued(true);
+    } catch (err) {setError((err as Error).message);}
+    finally {setOtpBusy(false);}
+  };
+  const createPickupOtp = async () => {
+    if (!session || session.mode !== 'real' || !storedOrder || otpBusy) return;
+    setOtpBusy(true);
+    setError(null);
+    try {
+      const issued = await request<PickupOtp2>(
+        '/v1/orders/' + encodeURIComponent(storedOrder.id) + '/pickup-otp',
+        session.access_token, {method: 'POST', timeoutMs: 75000});
+      setPickupOtp(issued);
+    } catch (err) {setError((err as Error).message);}
+    finally {setOtpBusy(false);}
+  };
   const preparePayment = async () => {
-    if (!session || qa || busy) return;
+    if (!session || session.mode === 'qa-preview' || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await request<Payment>('/v1/orders/' + encodeURIComponent(order.id) + '/payment', session.access_token, {method: 'POST'});
+      const result = await request<Payment>('/v1/orders/' + encodeURIComponent(order.id) + '/payment', session.access_token, {method: 'POST', timeoutMs: 75000});
       setPayment(result);
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
@@ -100,13 +186,10 @@ function DeliveryContent() {
   </View>;
 
   return <View style={{gap: 16, paddingBottom: 16}}>
-    <Pressable accessibilityRole="link" accessibilityLabel="Back to deliveries" onPress={() => router.push('/deliveries')}
-      style={{minHeight: 48, flexDirection: 'row', gap: 8, alignItems: 'center'}}>
-      <Icon name="arrow-back-outline" size={22} color={S.ink} />
-      <T style={{fontFamily: 'DMSansBold', fontSize: 18}}>{handover ? 'Locker Pin Pickup' : 'Rover Live Tracking'}</T>
-    </Pressable>
     {error && <ErrorNotice message={error} />}
-    {qa && previewControls}
+    {previewControls}
+    {qa && !handover && <Button variant="secondary" icon="wallet-outline"
+      onPress={() => setPreviewStage(0)} testID="qa-payment-preview">Preview payment screen</Button>}
     {handover ? <>
       <View style={{backgroundColor: S.pale, borderRadius: 12, padding: 5, flexDirection: 'row', gap: 4}}>
         {pickupLabels.map((label, index) => <View key={label} style={{flex: 1, minWidth: 0, paddingVertical: 10, paddingHorizontal: 3,
@@ -123,8 +206,8 @@ function DeliveryContent() {
             <Icon name="hardware-chip-outline" color="#A63B00" />
           </View>
           <View style={{flex: 1, minWidth: 0}}>
-            <T style={{fontFamily: 'DMSansBold', fontSize: 14}}>{qa ? 'QA sample rover' : 'Campus rover'}</T>
-            <T style={{fontSize: 12, color: S.muted}}>{destination} Hostel entrance</T>
+            <T style={{fontFamily: 'DMSansBold', fontSize: 14}}>{qa ? 'QA sample rover' : order.bot ? 'Rover Bot ' + shortId(order.bot.id) : 'Campus rover'}</T>
+            <T style={{fontSize: 12, color: S.muted}}>{destination} entrance</T>
           </View>
           <View style={{maxWidth: '32%'}}><Label>Order ref</Label><T style={{fontFamily: 'DMSansBold', fontSize: 12}}>{shortId(order.id)}</T></View>
         </View>
@@ -141,14 +224,14 @@ function DeliveryContent() {
         </View>
         <View style={{padding: 14, backgroundColor: S.blue, borderRadius: 10, flexDirection: 'row', gap: 10, alignItems: 'center'}}>
           <Icon name="wallet-outline" color="#A63B00" />
-          <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>UPI Direct / QR</T><T style={{fontSize: 12, color: S.muted}}>Provider-supplied payment code</T></View>
+          <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>UPI QR</T><T style={{fontSize: 12, color: S.muted}}>{qa ? 'Offline sample' : 'Scan with a UPI app on another device'}</T></View>
           <Icon name="checkmark-circle-outline" color={S.teal} />
         </View>
         <View style={{padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', opacity: .55}}>
           <Icon name="card-outline" color={S.muted} />
           <View style={{flex: 1}}><T style={{fontFamily: 'DMSansBold'}}>Debit / Campus Card</T><T style={{fontSize: 12, color: S.muted}}>Not available in this release</T></View>
         </View>
-        {payment && <View style={{gap: 12, alignItems: 'center'}}>
+        {payment && !alreadyPaid && !needsReview && <View style={{gap: 12, alignItems: 'center'}}>
           <Label>{payment.provider === 'demo' ? 'Nonpayable demo QR' : 'Secure payment QR'}</Label>
           <View style={{padding: 16, backgroundColor: S.white}}>
             {payment.provider === 'demo' && payment.qr_payload && !/^upi:/i.test(payment.qr_payload)
@@ -160,14 +243,35 @@ function DeliveryContent() {
           <T style={{fontSize: 12, lineHeight: 18, color: S.muted, textAlign: 'center'}}>
             {payment.provider === 'demo' ? 'This code is a demo reference. It cannot accept UPI payments.' : 'Wait for server verification after paying. Payment alone does not confirm the physical lid is open.'}
           </T>
-          {payment.expires_at && <T style={{fontSize: 12}}>{expired ? 'Payment preview expired.' : 'Valid until ' + formatTime(payment.expires_at)}</T>}
+          {payment.expires_at && <T style={{fontSize: 12}}>{expired ? 'QR expired. A new QR requires verification; contact support. Do not pay this QR.' : 'Valid until ' + formatTime(payment.expires_at)}</T>}
         </View>}
         <View style={{backgroundColor: '#FFDBCE', borderRadius: 10, padding: 14, gap: 6}}>
           <T style={{fontFamily: 'DMSansBold', fontSize: 13, color: '#7F2B00'}}>Automated Unlock</T>
-          <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Verified payment authorizes an unlock request. Wait for the rover to confirm your assigned compartment is open.</T>
+          <T style={{fontSize: 12, lineHeight: 19, color: '#7F2B00'}}>Payment and your HostelXpress pickup OTP (OTP 2) must BOTH be verified before the assigned inner lid can be authorized.</T>
         </View>
-        <Button onPress={() => void preparePayment()} loading={busy} disabled={qa} icon="flash-outline" testID="payment-create"
-          accessibilityLabel="Prepare payment preview">{expired ? 'Refresh payment preview' : 'Pay ' + formatAmount(order.amount) + ' via UPI'}</Button>
+        {expired && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          This QR has expired. Do not pay it. Contact support so the earlier payment attempt can be reconciled safely.
+        </T>}
+        {refunded && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          This payment was refunded. Do not pay again until HostelXpress support reviews your order.
+        </T>}
+        {paymentFailed && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          The payment attempt failed. Ask support to review the booking before paying again.
+        </T>}
+        {reconciling && <T accessibilityRole="alert" style={{fontSize: 13, color: '#BA1A1A'}}>
+          The provider has not confirmed whether a payment QR was created. Do not retry a charge; contact support.
+        </T>}
+        {alreadyPaid && <T accessibilityRole="alert" style={{fontSize: 13, color: S.teal}}>
+          Payment is verified. Waiting for the order and rover state to update. Do not pay again.
+        </T>}
+        <Button onPress={needsReview ? help : () => void preparePayment()} loading={busy}
+          disabled={qa || alreadyPaid} icon={needsReview ? 'headset-outline' : 'flash-outline'} testID="payment-create"
+          accessibilityLabel={needsReview ? 'Contact HostelXpress support' : alreadyPaid ? 'Payment already verified' : 'Show UPI payment QR'}>
+          {refunded ? 'Refunded · Contact Support' : paymentFailed ? 'Failed · Contact Support'
+            : reconciling ? 'QR status unclear · Contact Support'
+            : expired ? 'QR expired · Contact Support'
+            : alreadyPaid ? 'Payment verified' : 'Show ' + formatAmount(order.amount) + ' UPI QR'}
+        </Button>
         {qa && <T style={{fontSize: 12, color: S.muted}}>Offline sample · Payments require the connected backend.</T>}
       </Card>}
 
@@ -175,11 +279,28 @@ function DeliveryContent() {
         <View style={{height: 68, width: 68, borderRadius: 34, backgroundColor: unlocked ? '#2DA498' : S.orange, alignItems: 'center', justifyContent: 'center'}}>
           <Icon name={unlocked ? 'lock-open-outline' : 'time-outline'} size={34} color="#FFFFFF" />
         </View>
-        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : 'Payment Confirmed · Waiting for Unlock'}</Heading>
+        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : pickupState === 'otp_required' ? 'Payment Confirmed · Pickup OTP Required' : pickupState === 'unlock_pending' ? 'Pickup Verified · Waiting for Unlock' : pickupState === 'reconciliation_required' ? 'Pickup Needs Support' : 'Payment Confirmed · Checking Pickup Status'}</Heading>
         <T style={{fontSize: 13, lineHeight: 21, textAlign: 'center', color: unlocked ? S.teal : '#DAE2FD'}}>
-          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : 'Verifying hardware safety and waiting for the rover acknowledgement. Please stand clear of the compartment door.'}
+          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : pickupState === 'otp_required' ? 'Generate OTP 2 below, then enter it on the rover display. Payment alone cannot open the compartment.' : pickupState === 'unlock_pending' ? 'Your pickup was verified. Wait for confirmation that your assigned bay is open.' : pickupState === 'reconciliation_required' ? 'Your pickup needs operator review. Contact support before trying again.' : 'Waiting for a fresh pickup status for your assigned bay. Keep the compartment closed and contact support if this continues.'}
         </T>
         <Button variant="secondary" icon="headset-outline" onPress={help}>Get Help</Button>
+      </Card>}
+
+      {order.status === 'Paid' && pickupState === 'otp_required' && <Card style={{...card, backgroundColor: S.pale}}>
+        <Heading style={{fontSize: 18}}>HostelXpress pickup OTP · OTP 2</Heading>
+        <T style={{fontSize: 12, lineHeight: 19}}>Enter this code on your assigned rover screen. Only a signed rover request and a verified ₹10 payment can authorize the correct compartment.</T>
+        {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) > now &&
+          <View style={{alignItems: 'center', padding: 14, gap: 6}}>
+            <Heading style={{fontSize: 34, letterSpacing: 8}}>{pickupOtp.code}</Heading>
+            <T style={{fontSize: 12}}>Bay {pickupOtp.compartment} · Valid until {formatTime(pickupOtp.expires_at)}</T>
+          </View>}
+        {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) <= now &&
+          <T accessibilityRole="alert" style={{color: '#BA1A1A'}}>Pickup code expired. Contact support for reconciliation.</T>}
+        {session?.mode === 'real' && !pickupOtp &&
+          <Button onPress={() => void createPickupOtp()} loading={otpBusy} icon="shield-checkmark-outline"
+            testID="pickup-otp2-create">Generate pickup OTP 2</Button>}
+        {qa && <T style={{fontSize: 12}}>QA preview only · No real pickup code will be issued.</T>}
+        {session?.mode === 'demo' && <T style={{fontSize: 12}}>This feature requires real authenticated delivery and captured payment.</T>}
       </Card>}
 
       <Card style={card}>
@@ -200,25 +321,50 @@ function DeliveryContent() {
         <Heading style={{...title, textAlign: 'center'}}>Delivery Complete · Compartment Latched</Heading>
         <T style={{fontSize: 13, color: S.muted}}>Parcel collected and physical closure confirmed.</T>
         <Button onPress={() => router.push('/')} icon="home-outline">Return to Home Dashboard</Button>
-        <Button onPress={() => router.push('/deliveries')} variant="secondary">View delivery history</Button>
+        <Button onPress={() => router.push('/history')} variant="secondary">View delivery history</Button>
       </Card>}
       <Pressable accessibilityRole="link" accessibilityLabel="Get delivery help" onPress={help}
         style={{minHeight: 48, backgroundColor: S.blue, padding: 14, borderRadius: 12, flexDirection: 'row', gap: 8, alignItems: 'center'}}>
         <Icon name="headset-outline" /><T style={{flex: 1, fontFamily: 'DMSansBold'}}>Get help with {shortId(order.id)}</T>
       </Pressable>
     </> : <>
+      {order.status === 'Pending' && order.bot && <Card style={card}>
+        <Heading style={{fontSize: 17}}>Courier OTP · OTP 1</Heading>
+        <T style={{fontSize: 12, lineHeight: 19}}>If Amazon, Flipkart or your delivery company sends a code, enter it here. HostelXpress forwards it once to the assigned rover display for the delivery person. OTP 1 does not open a compartment.</T>
+        {session?.mode === 'real' && <>
+          <TextInput accessibilityLabel="Delivery-company OTP 1" value={courierCode} onChangeText={setCourierCode}
+            placeholder="4–8 digit courier OTP" keyboardType="number-pad" secureTextEntry
+            maxLength={8} autoComplete="off" style={{backgroundColor: S.pale, borderRadius: 9,
+            padding: 14, minHeight: 48, fontSize: 16, color: S.ink}}/>
+          <Button onPress={() => void sendCourierCode()} disabled={otpBusy || !/^[0-9]{4,8}$/.test(courierCode)}
+            loading={otpBusy} icon="send-outline" testID="courier-otp1-send">Send OTP 1 to rover display</Button>
+          {courierQueued && <T accessibilityRole="alert" style={{fontSize: 12, color: S.teal}}>
+            Code queued for one-time rover display. This does not confirm courier verification or authorize a lid.
+          </T>}
+        </>}
+        {qa && <T style={{fontSize: 12}}>Offline preview · No courier code is transmitted.</T>}
+        {demo && <T style={{fontSize: 12}}>Courier relay requires a real assigned delivery.</T>}
+      </Card>}
       <Card style={{...card, backgroundColor: S.dark, padding: 16, gap: 10}}>
         <View style={{backgroundColor: S.orange, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start'}}>
           <T style={{fontSize: 10, fontFamily: 'DMSansBold', color: S.white}}>{qa ? 'QA SAMPLE DELIVERY' : order.status === 'Transit' ? 'LIVE EN ROUTE' : status.toUpperCase()}</T>
         </View>
         <Heading style={{fontSize: 26, lineHeight: 33, color: '#EAF1FF', letterSpacing: -.6}}>
-          {order.status === 'Transit' ? 'ROVER EN ROUTE TO ' + destination.toUpperCase() + ' HOSTEL' : STATUS_COPY[order.status].title}
+          {order.status === 'Transit' ? 'ROVER EN ROUTE TO ' + destination.toUpperCase() : STATUS_COPY[order.status].title}
         </Heading>
         <T style={{fontSize: 13, lineHeight: 20, color: '#DAE2FD'}}>→ Next: Meet rover at Hostel Porch upon arrival</T>
+        {!qa && ['Pending', 'Loaded', 'Transit'].includes(order.status) &&
+          <T style={{fontSize: 12, color: '#DAE2FD'}}>Payment opens when the rover arrives.</T>}
       </Card>
       <Card style={card}>
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}><Icon name="git-branch-outline" color="#A63B00" /><Heading style={title}>Live Path &amp; Guidance</Heading></View>
-        <CampusMap status={order.status} hostel={order.destination_hostel_block} />
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}><Icon name="git-branch-outline" color="#A63B00" /><Heading style={title}>Campus route overview</Heading></View>
+        <CampusMap status={order.status} hostel={order.destination_hostel_block}
+          rover={order.bot && !stale ? 'ROVER ' + shortId(order.bot.id) : undefined} />
+        {session?.mode === 'real' && <T style={{fontSize: 12, color: S.muted}}>
+          {roverPosition
+            ? 'Latest rover GPS fix ' + roverPosition.lat.toFixed(6) + ', ' + roverPosition.lng.toFixed(6)
+            : 'A fresh rover GPS fix is unavailable.'}
+        </T>}
       </Card>
       <Card style={card}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
