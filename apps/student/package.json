@@ -40,5 +40,10 @@
     "export:web": "expo export --platform web",
     "test": "node --test tests/*.test.mjs"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@expo/fingerprint": {
+      "minimatch": "^11.0.1"
+    }
+  }
 }

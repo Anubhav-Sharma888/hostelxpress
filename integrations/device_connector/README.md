@@ -119,3 +119,14 @@ consumed and an inner command queued; reconcile it before any retry.
 Both flows are disabled on the current restricted staging deployment.
 The hardware team remains responsible for the rover screen, physical
 safety interlocks, actuation, ACKs and fresh door/bay telemetry.
+
+For pickup completion, supply the current physical `outer_closed`, `inner_closed`
+and `is_empty` readings together to `report_lid_event`. The optional lid readings
+must be booleans and agree with the reported event. Partial events remain
+supported, but cannot establish the complete fresh snapshot needed for completion.
+
+The local acceptance harness issues an owner-scoped synthetic student OTP2 and
+redeems it through the connector's signed HTTP method before either unlock.
+Payment capture alone must leave the command outbox empty. All broker, payment
+records, identities, sensor observations and actuator callbacks are synthetic;
+the harness uses a short owned Linux temporary directory for PostgreSQL sockets.

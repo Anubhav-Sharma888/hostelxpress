@@ -3,7 +3,7 @@
 // Profile values entered at signup survive email confirmation as Supabase
 // user metadata — display data only; the backend stays the sole owner of the
 // stored profile and revalidates every PATCH.
-import type {User} from './api';
+import type {RequestOptions, User} from './api';
 
 export type SignupMetadata = {name: string; hostel_block: string};
 export type ProfilePatch = {name?: string; hostel_block?: string};
@@ -14,7 +14,10 @@ export type SupabaseAuthLike = {
   signUp: (args: {email: string; password: string; options: {data: SignupMetadata}}) =>
     Promise<{data: {session: {access_token: string} | null; user: unknown} | null; error: {message: string} | null}>;
 };
-export type RequestLike = <T>(path: string, token?: string, options?: {method?: string; body?: unknown}) => Promise<T>;
+export type RequestLike = <T>(path: string, token?: string, options?: RequestOptions) => Promise<T>;
+
+// The first API call after authentication may have to wait for an idle host.
+const SIGN_IN_PROFILE_TIMEOUT_MS = 75_000;
 
 export class SessionChangedError extends Error {
   constructor() { super('The session changed. Please try again.'); this.name = 'SessionChangedError'; }
@@ -84,7 +87,7 @@ export async function fetchProfileWithOnboarding(
   let profile: User | null = null;
   let notFound: unknown = null;
   try {
-    profile = await deps.request<User>('/v1/me', token);
+    profile = await deps.request<User>('/v1/me', token, {timeoutMs: SIGN_IN_PROFILE_TIMEOUT_MS});
   } catch (error) {
     if (!isNotFound(error)) throw error;
     notFound = error;

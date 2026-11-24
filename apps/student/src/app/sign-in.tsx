@@ -227,9 +227,9 @@ function RealForm({hostel, setHostel}: {hostel: string; setHostel: (value: strin
         loading={busy}
         disabled={!email.trim() || !password || (create && !name.trim())}
         testID={create ? 'sign-up-submit' : 'sign-in-submit'}
-        accessibilityLabel={create ? 'Create account' : 'Sign in'}
+        accessibilityLabel={create ? 'Create account' : busy ? 'Signing in' : 'Sign in'}
       >
-        {create ? 'Create Mission Account' : 'Sign In to Mission Console'}
+        {create ? 'Create Mission Account' : busy ? 'Signing in…' : 'Sign In to Mission Console'}
       </Button>
       <Pressable
         accessibilityRole="link"

@@ -101,9 +101,38 @@ class MQTTBridge:
                 if order['is_demo'] or order['compartment_released_at'] is not None or command['bot_id']!=order['bot_id'] or command['compartment']!=order['compartment_id']:
                     conn.execute("UPDATE hostelxpress_private.command_outbox SET status='rejected',last_error='assignment_changed' WHERE id=%s",(command['id'],))
                     continue
-                if command['command']!='unlock_inner' or order['status']!='Paid' or not service.safe_bot(conn,bot):
+                if command['command']=='unlock_inner':
+                    # Enqueue guards cannot authorize old outbox rows. Recheck
+                    # signed OTP2 redemption before every physical publication.
+                    authorized=conn.execute(
+                        "SELECT 1 FROM hostelxpress_private.pickup_otp_challenges "
+                        "WHERE order_id=%s AND bot_id=%s AND compartment=%s "
+                        "AND consumed_at IS NOT NULL AND consumed_at<=%s",
+                        (order['id'],bot['id'],order['compartment_id'],command['issued_at'])).fetchone()
+                    if not authorized:
+                        conn.execute("UPDATE hostelxpress_private.command_outbox "
+                                     "SET status='rejected',last_error='pickup_authorization_missing' WHERE id=%s",
+                                     (command['id'],))
+                        continue
+                    if order['status']!='Paid' or bot['status'] not in {'AT_HOSTEL','UNLOCKED'}:
+                        continue
+                    if not conn.execute("SELECT 1 FROM public.transactions WHERE order_id=%s AND status='Captured' AND amount=1000 AND currency='INR' AND is_demo=false",(order['id'],)).fetchone():
+                        continue
+                    expected_empty=False
+                elif command['command']=='unlock_outer':
+                    if (order['status']!='Pending' or bot['status'] not in {'IDLE_AT_GATE','LOADING'}
+                            or order['rider_due_at']<=service.now()):
+                        continue
+                    expected_empty=True
+                else:
                     continue
-                if not conn.execute("SELECT 1 FROM public.transactions WHERE order_id=%s AND status='Captured' AND amount=1000 AND currency='INR' AND is_demo=false",(order['id'],)).fetchone():
+                if bot['is_demo'] or not service.safe_bot(conn,bot):
+                    continue
+                bay=conn.execute(
+                    "SELECT is_empty FROM hostelxpress_private.compartment_state "
+                    "WHERE bot_id=%s AND compartment_id=%s",
+                    (bot['id'],order['compartment_id'])).fetchone()
+                if not bay or bay['is_empty'] is not expected_empty:
                     continue
                 utc=lambda value:value.astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')
                 payload={'schema_version':1,'message_type':'command','message_id':str(command['id']),

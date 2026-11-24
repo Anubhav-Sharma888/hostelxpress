@@ -317,10 +317,19 @@ class HostelxpressLink:
 
     def report_lid_event(self, order_id: str, compartment: int, *, lid: Literal["outer", "inner"],
                          closed: bool, command_id: str | None = None,
-                         is_empty: bool | None = None) -> str:
+                         is_empty: bool | None = None, outer_closed: bool | None = None,
+                         inner_closed: bool | None = None) -> str:
+        """Report physical observations; both lids plus empty form a full snapshot."""
         if lid not in {"outer", "inner"} or type(closed) is not bool:
             raise ValueError("Explicit outer/inner lid and boolean sensor observation required")
         fields = {f"{lid}_closed": closed}
+        for field, value in (("outer_closed", outer_closed), ("inner_closed", inner_closed)):
+            if value is not None:
+                if type(value) is not bool:
+                    raise ValueError("Lid sensors must be physical boolean observations")
+                if field == f"{lid}_closed" and value is not closed:
+                    raise ValueError("Lid event must agree with its physical sensor observation")
+                fields[field] = value
         if is_empty is not None:
             if type(is_empty) is not bool:
                 raise ValueError("is_empty must be a physical boolean observation")

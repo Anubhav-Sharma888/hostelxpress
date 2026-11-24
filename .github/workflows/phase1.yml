@@ -59,6 +59,18 @@ jobs:
           cache: npm
           cache-dependency-path: apps/student/package-lock.json
       - run: npm ci
+      - name: Audit locked student dependencies
+        run: npm audit --audit-level=moderate
+      - name: Check patched fingerprint matcher compatibility
+        run: |
+          node - <<'JS'
+          const {createFingerprintAsync} = require('@expo/fingerprint');
+          (async () => {
+            const result = await createFingerprintAsync(process.cwd(), {platforms: ['android']});
+            if (!result.hash || !result.sources.length) throw new Error('Fingerprint generation failed');
+            console.log('Android fingerprint matcher passed');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          JS
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

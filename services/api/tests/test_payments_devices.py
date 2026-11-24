@@ -343,6 +343,11 @@ def test_synthetic_capture_to_signed_inner_lid_completion_without_real_actuation
     closed.update(observed_at=closed['sent_at'],event_type='inner_lid_closed',
                   order_id=str(live['order']),compartment=1,
                   command_id=str(command_id),inner_closed=True,is_empty=True)
+    # A partial close event cannot borrow the pre-unlock snapshot's freshness.
+    partial=device(live,closed)
+    assert partial.status_code==409,partial.text
+    closed['message_id']=str(uuid4())
+    closed['outer_closed']=True
     receipt=device(live,closed)
     assert receipt.status_code==200,receipt.text
     with live['db'].connection() as conn:

@@ -19,7 +19,7 @@ const items: {q: string; a: string; aReal?: string; tag: string}[] = [
     q: 'When do I pay the ₹10 fee?',
     tag: 'PAYMENT',
     a: 'Pay only after the parcel arrives. In the current demo the QR is nonpayable, and the explicitly labelled simulation records a test payment. A live delivery must use a verified Razorpay payment before the backend requests an unlock.',
-    aReal: 'Pay only after the parcel arrives. Your payment is verified through Razorpay before the backend requests an unlock.',
+    aReal: 'Pay only after the parcel arrives. Your Razorpay payment and HostelXpress pickup OTP 2 must both be verified before the backend authorizes your assigned inner lid.',
   },
   {
     q: 'Why does tracking say “Telemetry stale”?',
@@ -51,9 +51,9 @@ export default function Help() {
   return (
     <View style={{gap: 20}}>
       <PageTitle
-        eyebrow="Campus Rover Support"
-        title="Diagnostic & Help Desk"
-        description="Contact the HostelXpress team, check your delivery, or get pickup help."
+        eyebrow="HostelXpress support"
+        title="Help & History"
+        description="Call the support team, browse your past deliveries, or find answers to common questions."
       />
 
       <View style={{flexDirection: 'row', gap: 14, flexWrap: 'wrap'}}>
@@ -87,7 +87,7 @@ export default function Help() {
         </Pressable>
         <Pressable
           accessibilityRole="link"
-          onPress={() => router.push('/deliveries')}
+          onPress={() => router.push('/history')}
           style={({pressed}) => ({
             flex: 1,
             minWidth: 240,
@@ -98,10 +98,10 @@ export default function Help() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Icon name="pulse-outline" size={22} color={C.primary} />
+          <Icon name="receipt-outline" size={22} color={C.primary} />
           <View>
-            <Heading style={{fontSize: 18, lineHeight: 24}}>Track your delivery</Heading>
-            <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>Open an active delivery to check its rover and pickup status.</T>
+            <Heading style={{fontSize: 18, lineHeight: 24}}>Delivery history</Heading>
+            <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>Review completed and failed deliveries.</T>
           </View>
         </Pressable>
       </View>

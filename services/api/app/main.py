@@ -75,7 +75,14 @@ def create_app(settings:Settings | None=None) -> FastAPI:
             migrated=conn.execute("SELECT count(*)=3 AS ready FROM hostelxpress_private.schema_migrations WHERE version IN ('0001_application_core','0002_device_reconciliation','0003_after_hours_pilot')").fetchone()['ready']
             if not migrated:
                 raise RuntimeError('Apply all application migrations before starting the API')
-            if settings.pickup_otp_enabled:
+            if not settings.is_demo:
+                safe_commands=conn.execute(
+                    "SELECT count(*)=2 AS ready FROM hostelxpress_private.schema_migrations "
+                    "WHERE version IN ('0004_pickup_and_courier','0005_command_authorization')"
+                ).fetchone()['ready']
+                if not safe_commands:
+                    raise RuntimeError('Apply OTP2 and command authorization migrations before starting the live API')
+            elif settings.pickup_otp_enabled:
                 has_otp_schema=conn.execute("SELECT 1 FROM hostelxpress_private.schema_migrations WHERE version='0004_pickup_and_courier'").fetchone()
                 if not has_otp_schema:
                     raise RuntimeError('Apply OTP2 and courier relay migration before enabling delivery codes')

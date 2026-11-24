@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Pressable, View} from 'react-native';
-import {router} from 'expo-router';
+import {router, useLocalSearchParams} from 'expo-router';
 import {BookModal} from '../components/BookModal';
 import {hostelName} from '../campus';
 import {COLORS as C, formatAmount, formatDate, isActive, shortId, STATUS_COPY} from '../model';
@@ -8,13 +8,15 @@ import {useApp} from '../state';
 import {Button, Card, common, ErrorNotice, Heading, Icon, Label, Loading, T} from '../ui';
 
 export default function Deliveries() {
-  const {orders, user, loading, error, refresh} = useApp();
+  const {orders, user, session, loading, error, refresh} = useApp();
+  const {view} = useLocalSearchParams<{view?: string}>();
+  const activeOnly = view === 'active';
   const [tab, setTab] = useState<'all' | 'active' | 'completed'>('all');
   const [booking, setBooking] = useState(false);
 
   const activeOrders = orders.filter(isActive);
   const completedOrders = orders.filter(order => order.status === 'Completed');
-  const visible = orders.filter(order => tab === 'all' || (tab === 'active' ? isActive(order) : order.status === 'Completed'));
+  const visible = activeOnly ? activeOrders : orders.filter(order => tab === 'all' || (tab === 'active' ? isActive(order) : order.status === 'Completed'));
 
   return (
     <View style={{gap: 20}}>
@@ -33,7 +35,7 @@ export default function Deliveries() {
 
         <View style={[common.between, {alignItems: 'flex-start', flexWrap: 'wrap', gap: 12}]}>
           <View style={{flex: 1, minWidth: 200}}>
-            <Heading style={{fontSize: 28, lineHeight: 36, letterSpacing: -0.8}}>Parcel Vault</Heading>
+            <Heading style={{fontSize: 28, lineHeight: 36, letterSpacing: -0.8}}>{activeOnly ? 'Active Orders' : 'Parcel Vault'}</Heading>
             <T style={{fontSize: 12, color: C.muted, marginTop: 2}}>
               {user?.hostel_block ? hostelName(user.hostel_block) + ' porch' : 'Gate 2 to your campus doorstep'}
             </T>
@@ -45,7 +47,7 @@ export default function Deliveries() {
       </View>
 
       {/* Interactive Segmented Control Tabs */}
-      <View style={{padding: 4, borderRadius: 12, backgroundColor: '#DCE2F7', flexDirection: 'row', gap: 4}}>
+      {!activeOnly && <View style={{padding: 4, borderRadius: 12, backgroundColor: '#DCE2F7', flexDirection: 'row', gap: 4}}>
         <Pressable
           accessibilityRole="tab"
           accessibilityLabel="All deliveries"
@@ -120,7 +122,7 @@ export default function Deliveries() {
             <T style={{fontFamily: 'DMSansBold', fontSize: 10, color: C.muted}}>{completedOrders.length}</T>
           </View>
         </Pressable>
-      </View>
+      </View>}
 
       {error && <ErrorNotice message={error} retry={() => void refresh()} />}
 
@@ -131,6 +133,7 @@ export default function Deliveries() {
           {visible.map(order => {
             const active = isActive(order);
             if (active) {
+              const staging = session?.mode === 'real' && order.is_demo;
               /* Stitch Autonomous Rover Active Card */
               return (
                 <View
@@ -154,14 +157,14 @@ export default function Deliveries() {
                         <Icon name="hardware-chip-outline" size={20} color={C.lime} />
                       </View>
                       <View>
-                        <Heading style={{fontSize: 16, lineHeight: 22, color: '#FFFFFF'}}>Rover-04</Heading>
-                        <T style={{fontSize: 10, color: '#C4C1FB'}}>LiDAR v2.4 · Autonav Active</T>
+                        <Heading style={{fontSize: 16, lineHeight: 22, color: '#FFFFFF'}}>{staging ? 'Test booking' : order.bot ? 'Rover ' + order.bot.id.slice(0, 8) : 'Awaiting rover'}</Heading>
+                        <T style={{fontSize: 10, color: '#C4C1FB'}}>{shortId(order.id)}</T>
                       </View>
                     </View>
                     <View style={{backgroundColor: '#4A5668', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 5}}>
                       <View style={{width: 5, height: 5, borderRadius: 3, backgroundColor: C.lime}} />
                       <T style={{fontFamily: 'DMSansBold', fontSize: 10, color: '#ACF847', letterSpacing: 0.6}}>
-                        {STATUS_COPY[order.status].label.toUpperCase()}
+                        {staging ? 'SAVED IN STAGING' : STATUS_COPY[order.status].label.toUpperCase()}
                       </T>
                     </View>
                   </View>
@@ -173,9 +176,7 @@ export default function Deliveries() {
                         <Icon name="enter-outline" size={14} color="#EDF0FF" />
                         <T style={{fontSize: 11, fontFamily: 'DMSansBold', color: '#EDF0FF'}}>Gate 2 Security Hub</T>
                       </View>
-                      <View style={{backgroundColor: '#334155', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4}}>
-                        <T style={{fontSize: 9, fontFamily: 'DMSansBold', color: '#ACF847'}}>11 km/h</T>
-                      </View>
+                      <Icon name="arrow-forward-outline" size={13} color="#C4C1FB" />
                       <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
                         <Icon name="business-outline" size={14} color={C.lime} />
                         <T style={{fontSize: 11, fontFamily: 'DMSansBold', color: '#EDF0FF'}}>{hostelName(order.destination_hostel_block)}</T>
@@ -185,7 +186,7 @@ export default function Deliveries() {
 
                   <View style={common.between}>
                     <T style={{fontSize: 11, color: '#C4C1FB'}}>
-                      Bay 0{order.compartment_id || 1} · {order.parcel_label || 'Campus parcel'}
+                      {order.compartment_id ? 'Bay ' + order.compartment_id + ' · ' : ''}{order.parcel_label || 'Campus parcel'}
                     </T>
                     <T style={{fontFamily: 'ManropeBold', fontSize: 14, color: '#FFFFFF'}}>
                       {formatAmount(order.amount)}
@@ -196,9 +197,9 @@ export default function Deliveries() {
                     variant="primary"
                     icon="compass-outline"
                     onPress={() => router.push({pathname: '/order/[id]', params: {id: order.id}})}
-                    accessibilityLabel="Track live mission console"
+                    accessibilityLabel={staging ? 'View test booking' : 'Track live mission console'}
                   >
-                    Track Live Mission Console
+                    {staging ? 'View test booking' : 'Track Live Mission Console'}
                   </Button>
                 </View>
               );
@@ -272,10 +273,10 @@ export default function Deliveries() {
           <View style={{height: 60, width: 60, borderRadius: 20, backgroundColor: C.lavender, justifyContent: 'center', alignItems: 'center'}}>
             <Icon name="archive-outline" size={28} color={C.primary} />
           </View>
-          <Heading style={{fontSize: 20, lineHeight: 28}}>No deliveries found</Heading>
-          <T style={{fontSize: 12, color: C.muted, marginBottom: 8}}>Your parcels and dispatches will appear here.</T>
-          <Button variant="primary" onPress={() => setBooking(true)} accessibilityLabel="Book your first delivery">
-            Book your first delivery
+          <Heading style={{fontSize: 20, lineHeight: 28}}>{activeOnly ? 'No active orders' : 'No deliveries found'}</Heading>
+          <T style={{fontSize: 12, color: C.muted, marginBottom: 8}}>{activeOnly ? 'Your orders in progress will appear here.' : 'Your parcels and dispatches will appear here.'}</T>
+          <Button variant="primary" onPress={() => setBooking(true)}>
+            Book a delivery
           </Button>
         </Card>
       )}

@@ -165,11 +165,17 @@ def create_payment(db, provider, order_id, user_id, is_demo):
         if not safe_qr_image_url(url):
             raise HTTPException(502,'Provider did not supply a usable HTTPS QR image')
     with db.connection() as conn:
-        service.lock_order(conn,order_id,user_id)
+        order,_ = service.lock_order(conn,order_id,user_id)
         payment = conn.execute("UPDATE public.transactions SET razorpay_qr_id=%s,qr_image_url=%s,expires_at=%s,provider_state='ready' WHERE request_id=%s AND provider_state='creating' RETURNING *",(qr['id'],qr.get('image_url'),expires_at,request_id)).fetchone()
         if not payment:
             raise HTTPException(409,'Payment intent changed; refresh your order')
-        return response(payment)
+        # Provider creation outlives the first transaction. Save its identity
+        # even when the order changed, but withhold an ineligible payable QR.
+        view=response(payment)
+        if order['status']!='Arrived' and view['status']=='pending':
+            view['status']='reconciling'
+            view['qr_image_url']=None
+        return view
 
 
 def verify_signature(raw:bytes,signature:str | None,secret:str):

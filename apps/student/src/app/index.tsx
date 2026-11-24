@@ -22,7 +22,7 @@ export default function Overview() {
   const services: {title:string; subtitle:string; icon:ComponentProps<typeof MaterialCommunityIcons>['name']; action:()=>void; testID?:string}[] = [
     {title:'Night Delivery Window',subtitle:'After Hours food delivery',icon:'moon-waning-crescent',action:()=>router.push('/afterhours' as never),testID:'afterhours-open'},
     {title:'Campus Dropoff Rules',subtitle:'Cargo guidance, payment & collection',icon:'clipboard-list-outline',action:()=>router.push('/help')},
-    {title:'Past Deliveries & Invoices',subtitle:'View '+orders.filter(order=>!isActive(order)).length+' previous dispatches',icon:'receipt-text-outline',action:()=>router.push('/deliveries')},
+    {title:'Delivery history',subtitle:'View '+orders.filter(order=>!isActive(order)).length+' past deliveries',icon:'receipt-text-outline',action:()=>router.push('/history')},
   ];
   return <View style={{gap:16}}>
     {sampleMode && <View style={{gap:6}}>
@@ -44,8 +44,8 @@ export default function Overview() {
       {showActive && active ? <>
         <Card style={{padding:20,gap:14}}>
           <View style={common.between}><Label style={{color:C.primary}}>Active delivery</Label><T style={{fontSize:11,color:C.muted}}>{shortId(active.id)}</T></View>
-          <Heading style={{fontSize:24,lineHeight:31}}>On the way to {hostelName(active.destination_hostel_block)}</Heading>
-          <T style={{color:C.muted,fontSize:12}}>{STATUS_COPY[active.status].description}</T>
+          <Heading style={{fontSize:24,lineHeight:31}}>Delivery to {hostelName(active.destination_hostel_block)}</Heading>
+          <T style={{color:C.muted,fontSize:12}}>{session.mode==='real' && active.is_demo ? 'Test booking saved in staging. No rover or payment is assigned.' : STATUS_COPY[active.status].description}</T>
           <View style={{height:8,borderRadius:8,backgroundColor:C.pale,overflow:'hidden'}}>
             <View style={{height:8,borderRadius:8,backgroundColor:C.orange,width:`${Math.max(1,FLOW.indexOf(active.status)+1)/FLOW.length*100}%`}}/>
           </View>

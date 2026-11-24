@@ -5,7 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import {ApiError, Order, Payment, PickupOtp2, request} from '../../api';
 import {hostelName} from '../../campus';
 import {CampusMap} from '../../components/CampusMap';
-import {FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
+import {derivePickupState, FLOW, formatAmount, formatTime, freshRoverPosition, isStale, nextDemoAction, shortId, STATUS_COPY} from '../../model';
 import {useApp} from '../../state';
 import {useClock} from '../../hooks/useClock';
 import {Button, Card, ErrorNotice, Heading, Icon, Label, Loading, T} from '../../ui';
@@ -43,6 +43,7 @@ function DeliveryContent() {
   const paymentToken = session && session.mode !== 'qa-preview' ? session.access_token : undefined;
   const paymentOrderId = storedOrder?.id;
   const paymentOrderStatus = storedOrder?.status;
+  const paymentPickupState = storedOrder?.pickup_state;
   // Rehydrate a saved payment after screen reopen without creating another QR.
   // The server returns 404 before first payment; that is an expected state.
   useEffect(() => {
@@ -63,7 +64,8 @@ function DeliveryContent() {
   // Read-only recovery of an already issued pickup code; it never creates
   // one and does not issue any compartment command.
   useEffect(() => {
-    if (!paymentToken || !paymentOrderId || paymentOrderStatus !== 'Paid') return;
+    if (session?.mode !== 'real' || !paymentToken || !paymentOrderId ||
+        paymentOrderStatus !== 'Paid' || paymentPickupState !== 'otp_required') return;
     let active = true;
     void request<PickupOtp2>('/v1/orders/' + encodeURIComponent(paymentOrderId) + '/pickup-otp',
       paymentToken).then(result => {
@@ -74,13 +76,22 @@ function DeliveryContent() {
         }
       });
     return () => {active = false;};
-  }, [paymentToken, paymentOrderId, paymentOrderStatus]);
+  }, [paymentToken, paymentOrderId, paymentOrderStatus, paymentPickupState, session?.mode]);
 
   if (!storedOrder) {
     return loading ? <Loading /> : <View style={{gap: 16}}>
       <Heading style={title}>Delivery unavailable.</Heading>
       <Button onPress={() => router.replace('/deliveries')}>Back to my deliveries</Button>
     </View>;
+  }
+  if (session?.mode === 'real' && storedOrder.is_demo) {
+    return <Card style={{...card, gap: 10}}>
+      <Label>{shortId(storedOrder.id)}</Label>
+      <Heading style={title}>Test booking saved</Heading>
+      <T>{storedOrder.parcel_label} · {hostelName(storedOrder.destination_hostel_block)}</T>
+      <T style={{color:S.muted}}>Your booking is stored in staging. It has no rover assignment and no charge.</T>
+      <Button variant="secondary" onPress={() => router.push({pathname:'/deliveries',params:{view:'active'}})}>Back to active orders</Button>
+    </Card>;
   }
   // Preview controls render local fixture states only. They never send commands or payments.
   const order: Order = qa && previewStage !== null ? {
@@ -95,7 +106,8 @@ function DeliveryContent() {
     },
   } : storedOrder;
   const stale = isStale(order.bot?.last_seen_at, now);
-  const unlocked = order.status === 'Paid' && order.bot?.status === 'UNLOCKED' && !stale;
+  const pickupState = derivePickupState(order, session?.mode ?? 'real', now);
+  const unlocked = pickupState === 'open';
   const handover = ['Arrived', 'Paid', 'Completed'].includes(order.status);
   const pickupStage = order.status === 'Completed' ? 3 : unlocked ? 2 : order.status === 'Paid' ? 1 : 0;
   const expired = payment?.status === 'pending' && payment.expires_at ? Date.parse(payment.expires_at) <= now : false;
@@ -267,14 +279,14 @@ function DeliveryContent() {
         <View style={{height: 68, width: 68, borderRadius: 34, backgroundColor: unlocked ? '#2DA498' : S.orange, alignItems: 'center', justifyContent: 'center'}}>
           <Icon name={unlocked ? 'lock-open-outline' : 'time-outline'} size={34} color="#FFFFFF" />
         </View>
-        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : 'Payment Confirmed · Pickup OTP Required'}</Heading>
+        <Heading style={{...title, textAlign: 'center', color: unlocked ? S.teal : S.white}}>{unlocked ? 'Ready to Collect · Bay ' + order.compartment_id : pickupState === 'otp_required' ? 'Payment Confirmed · Pickup OTP Required' : pickupState === 'unlock_pending' ? 'Pickup Verified · Waiting for Unlock' : pickupState === 'reconciliation_required' ? 'Pickup Needs Support' : 'Payment Confirmed · Checking Pickup Status'}</Heading>
         <T style={{fontSize: 13, lineHeight: 21, textAlign: 'center', color: unlocked ? S.teal : '#DAE2FD'}}>
-          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : 'Generate OTP 2 below, then enter it on the rover display. Payment alone cannot open the compartment.'}
+          {unlocked ? 'Take your parcel and close the lid firmly. Wait for the rover to confirm closure.' : pickupState === 'otp_required' ? 'Generate OTP 2 below, then enter it on the rover display. Payment alone cannot open the compartment.' : pickupState === 'unlock_pending' ? 'Your pickup was verified. Wait for confirmation that your assigned bay is open.' : pickupState === 'reconciliation_required' ? 'Your pickup needs operator review. Contact support before trying again.' : 'Waiting for a fresh pickup status for your assigned bay. Keep the compartment closed and contact support if this continues.'}
         </T>
         <Button variant="secondary" icon="headset-outline" onPress={help}>Get Help</Button>
       </Card>}
 
-      {order.status === 'Paid' && !unlocked && <Card style={{...card, backgroundColor: S.pale}}>
+      {order.status === 'Paid' && pickupState === 'otp_required' && <Card style={{...card, backgroundColor: S.pale}}>
         <Heading style={{fontSize: 18}}>HostelXpress pickup OTP · OTP 2</Heading>
         <T style={{fontSize: 12, lineHeight: 19}}>Enter this code on your assigned rover screen. Only a signed rover request and a verified ₹10 payment can authorize the correct compartment.</T>
         {session?.mode === 'real' && pickupOtp && Date.parse(pickupOtp.expires_at) > now &&
@@ -309,7 +321,7 @@ function DeliveryContent() {
         <Heading style={{...title, textAlign: 'center'}}>Delivery Complete · Compartment Latched</Heading>
         <T style={{fontSize: 13, color: S.muted}}>Parcel collected and physical closure confirmed.</T>
         <Button onPress={() => router.push('/')} icon="home-outline">Return to Home Dashboard</Button>
-        <Button onPress={() => router.push('/deliveries')} variant="secondary">View delivery history</Button>
+        <Button onPress={() => router.push('/history')} variant="secondary">View delivery history</Button>
       </Card>}
       <Pressable accessibilityRole="link" accessibilityLabel="Get delivery help" onPress={help}
         style={{minHeight: 48, backgroundColor: S.blue, padding: 14, borderRadius: 12, flexDirection: 'row', gap: 8, alignItems: 'center'}}>
